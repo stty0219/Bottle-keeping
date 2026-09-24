@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isMember(lid) {
+      return signedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/ledgers/$(lid)).data.members;
+    }
+
+    match /ledgers/{lid} {
+      // 只有帳本成員能讀取
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      // 建立帳本時，自己必須是擁有者、也是唯一成員
+      allow create: if signedIn()
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.members == [request.auth.uid];
+      // 成員可以改罐子與分類，但不能改擁有者和成員名單（第二階段共享時再開放）
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.members
+        && request.resource.data.owner == resource.data.owner
+        && request.resource.data.members == resource.data.members;
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+
+      match /txns/{tid} {
+        allow read, write: if isMember(lid);
+      }
+    }
+  }
+}
