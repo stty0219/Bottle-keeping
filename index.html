@@ -195,8 +195,18 @@ function persist(){
 }
 function setSync(t){document.getElementById('sync').textContent=t}
 
+function migrate(){
+  for(const t of S.txns){
+    if(t.type!=='income'||t.mode)continue;
+    const ks=Object.keys(t.alloc||{}).filter(k=>t.alloc[k]);
+    const active=S.buckets.filter(b=>+b.pct>0).length;
+    if(ks.length===1&&active>1){t.mode='one';t.target=ks[0]}else t.mode='pct';
+    delete t.alloc;
+  }
+}
 function init(){
   S=loadLocal()||defaults();
+  migrate();saveLocal();
   render();
   setSync('已存在此裝置');
   if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
@@ -210,7 +220,7 @@ function exportCSV(){
   const rows=[['日期','類型','金額','分類','罐子','備註']];
   for(const t of [...S.txns].sort((a,b)=>a.date<b.date?-1:1)){
     if(t.type==='expense'){const c=catById(t.catId),b=bucketById(t.bucketId);rows.push([t.date,'支出',t.amount,c?c.name:'',b?b.name:'',t.note])}
-    else if(t.type==='income'){rows.push([t.date,'收入',t.amount,'',Object.entries(t.alloc).map(([k,v])=>(bucketById(k)?.name||'')+' '+v).join('；'),t.note])}
+    else if(t.type==='income'){rows.push([t.date,'收入',t.amount,'',Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>(bucketById(k)?.name||'')+' '+v).join('；'),t.note])}
     else rows.push([t.date,'轉移',t.amount,'',(bucketById(t.from)?.name||'')+'→'+(bucketById(t.to)?.name||''),t.note]);
   }
   const csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')).join('\n');
@@ -220,7 +230,7 @@ function exportCSV(){
 function importData(file){
   const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.buckets||!d.categories||!d.txns)throw 0;
-    if(!confirm('用備份檔取代目前所有資料？'))return;S=d;persist();render();toast('已還原備份')}catch(e){toast('這不是有效的備份檔')}};
+    if(!confirm('用備份檔取代目前所有資料？'))return;S=d;migrate();persist();render();toast('已還原備份')}catch(e){toast('這不是有效的備份檔')}};
   r.readAsText(file);
 }
 
@@ -235,13 +245,15 @@ function allocate(amount,mode,target){
   S.buckets.forEach((b,i)=>{const v=i===S.buckets.length-1?rem:Math.round(amount*(+b.pct||0)/tot);res[b.id]=v;rem-=v});
   return res;
 }
-function stats(){
+function incAlloc(t){return t.mode==='one'?{[t.target]:t.amount}:allocate(t.amount,'pct')}
+function stats(excludeId){
   const m=today().slice(0,7);
   const out={};
   S.buckets.forEach(b=>out[b.id]={in:0,out:0,monthOut:0,monthIn:0});
   for(const t of S.txns){
+    if(t.id===excludeId)continue;
     const mon=t.date.slice(0,7)===m;
-    if(t.type==='income'){for(const k in t.alloc){if(out[k]){out[k].in+=t.alloc[k];if(mon)out[k].monthIn+=t.alloc[k]}}}
+    if(t.type==='income'){const al=incAlloc(t);for(const k in al){if(out[k]){out[k].in+=al[k];if(mon)out[k].monthIn+=al[k]}}}
     else if(t.type==='expense'){if(out[t.bucketId]){out[t.bucketId].out+=t.amount;if(mon)out[t.bucketId].monthOut+=t.amount}}
     else if(t.type==='transfer'){if(out[t.from])out[t.from].out+=t.amount;if(out[t.to])out[t.to].in+=t.amount}
   }
@@ -281,20 +293,20 @@ function sortTx(a,b){return a.date<b.date?1:a.date>b.date?-1:(b.ts||0)-(a.ts||0)
 function txRow(t){
   let ic='💵',t1='',t2='',amt='',cls='';
   if(t.type==='expense'){const c=catById(t.catId);const b=bucketById(t.bucketId);ic=c?c.emoji:'🧾';t1=c?c.name:'已刪除分類';t2=`<span class="dot" style="background:${b?b.color:'#999'}"></span>${esc(b?b.name:'—')}${t.note?'｜'+esc(t.note):''}`;amt='−'+money(t.amount)}
-  else if(t.type==='income'){t1=t.note||'收入';t2=Object.entries(t.alloc).map(([k,v])=>{const b=bucketById(k);return b?`${esc(b.name)} ${money(v)}`:''}).filter(Boolean).join('、');amt='+'+money(t.amount);cls='in'}
+  else if(t.type==='income'){t1=t.note||'收入';t2=(t.mode==='one'?'全部放入・':'依比例・')+Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>{const b=bucketById(k);return b?`${esc(b.name)} ${money(v)}`:''}).filter(Boolean).join('、');amt='+'+money(t.amount);cls='in'}
   else{const f=bucketById(t.from),to=bucketById(t.to);ic='🔁';t1=`${f?f.name:'—'} → ${to?to.name:'—'}`;t2=t.note?esc(t.note):'罐子間轉移';amt=money(t.amount)}
   return `<li><button class="tx" data-action="tx" data-id="${t.id}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div><div class="t2">${t2}</div></span><span class="amt num ${cls}">${amt}</span></button></li>`;
 }
 function listView(){
   const chips=[`<button class="chip" data-action="lb" data-b="all" aria-pressed="${listBucket==='all'}">全部</button>`]
     .concat(S.buckets.map(b=>`<button class="chip" data-action="lb" data-b="${b.id}" aria-pressed="${listBucket===b.id}"><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</button>`)).join('');
-  const rel=t=>listBucket==='all'||(t.type==='expense'&&t.bucketId===listBucket)||(t.type==='income'&&t.alloc[listBucket])||(t.type==='transfer'&&(t.from===listBucket||t.to===listBucket));
+  const rel=t=>listBucket==='all'||(t.type==='expense'&&t.bucketId===listBucket)||(t.type==='income'&&incAlloc(t)[listBucket])||(t.type==='transfer'&&(t.from===listBucket||t.to===listBucket));
   const items=S.txns.filter(t=>t.date.slice(0,7)===listMonth&&rel(t)).sort(sortTx);
   let html='',last='';
   let sumOut=0,sumIn=0;
   for(const t of items){
     if(t.type==='expense')sumOut+=t.amount;
-    if(t.type==='income')sumIn+=listBucket==='all'?t.amount:(t.alloc[listBucket]||0);
+    if(t.type==='income')sumIn+=listBucket==='all'?t.amount:(incAlloc(t)[listBucket]||0);
     if(t.date!==last){if(last)html+='</ul>';const d=new Date(t.date+'T00:00');html+=`<div class="day">${d.getMonth()+1}月${d.getDate()}日 週${'日一二三四五六'[d.getDay()]}</div><ul class="txs">`;last=t.date}
     html+=txRow(t);
   }
@@ -319,7 +331,7 @@ function settingsView(){
     <select data-edit="cbucket" data-id="${c.id}" aria-label="扣款罐子">${opts(c.bucketId)}</select>
     <button class="icon-btn" data-action="delc" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
   return `<h2 style="margin-top:0">罐子與分配比例</h2>
-  <p class="note">每筆收入依這裡的比例分進各罐。修改比例只影響之後的收入。</p>
+  <p class="note">「依比例分配」的收入會跟著這裡的比例即時重新計算，包含過去的紀錄；「全部放入一罐」的收入不受影響。</p>
   ${bl}
   <div class="pctsum ${sum===100?'':'bad'}">合計 ${sum}%${sum===100?'':'，建議調整到 100%（目前會依比例換算）'}</div>
   <button class="ghost" style="margin-top:12px" data-action="addb">新增罐子</button>
@@ -358,16 +370,16 @@ function addHtml(){
   }else{
     body=`<div class="row2"><label class="f">從<select id="from">${opts(d.from)}</select></label><label class="f">到<select id="to">${opts(d.to)}</select></label></div>`;
   }
-  return `<div class="seg">${seg}</div>
+  return `${d.editId?'<h2 style="margin:0 0 12px">編輯紀錄</h2>':''}<div class="seg">${seg}</div>
   <div class="amount"><span>$</span><input id="amt" class="num" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${esc(d.amount)}" aria-label="金額"></div>
   ${body}
   <p class="hint" id="hint"></p>
   <div class="row2"><label class="f">日期<input type="date" id="date" value="${d.date}"></label><label class="f">${d.type==='income'?'來源':'備註'}<input type="text" id="note" value="${esc(d.note)}" placeholder="${d.type==='income'?'例如：薪水':'選填'}"></label></div>
-  <button class="primary" id="saveBtn" data-action="save">記下這筆</button>`;
+  <button class="primary" id="saveBtn" data-action="save">${d.editId?'儲存變更':'記下這筆'}</button>${d.editId?`<button class="ghost danger" style="width:100%;margin-top:10px" data-action="deltx" data-id="${d.editId}">刪除這筆</button>`:''}`;
 }
 function updateHint(){
   const d=draft;if(!d)return;const h=document.getElementById('hint');const btn=document.getElementById('saveBtn');
-  const amt=Math.round(+d.amount||0);const st=stats();let ok=amt>0,msg='';
+  const amt=Math.round(+d.amount||0);const st=stats(d.editId);let ok=amt>0,msg='';
   if(d.type==='expense'){
     const c=catById(d.catId);ok=ok&&!!c;
     if(c){const b=bucketById(c.bucketId);const after=st[b.id].bal-amt;msg=`從「<b>${esc(b.name)}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
@@ -383,17 +395,22 @@ function updateHint(){
 }
 function saveDraft(){
   const d=draft;const amt=Math.round(+d.amount||0);if(amt<=0)return;
-  const base={id:uid(),ts:Date.now(),type:d.type,amount:amt,date:d.date||today(),note:(d.note||'').trim()};
+  const old=d.editId?S.txns.find(t=>t.id===d.editId):null;
+  const base={id:old?old.id:uid(),ts:old?old.ts:Date.now(),type:d.type,amount:amt,date:d.date||today(),note:(d.note||'').trim()};
   if(d.type==='expense'){const c=catById(d.catId);if(!c)return;base.catId=c.id;base.bucketId=c.bucketId}
-  else if(d.type==='income'){base.alloc=allocate(amt,d.mode,d.target)}
+  else if(d.type==='income'){base.mode=d.mode;if(d.mode==='one')base.target=d.target}
   else{if(d.from===d.to)return;base.from=d.from;base.to=d.to}
-  S.txns.push(base);persist();closeSheet();render();toast('已記下');
+  if(old){S.txns[S.txns.indexOf(old)]=base}else S.txns.push(base);
+  persist();closeSheet();render();toast(old?'已儲存變更':'已記下');
 }
 function openTx(id){
   const t=S.txns.find(x=>x.id===id);if(!t)return;
-  openSheet(`<ul class="txs">${txRow(t)}</ul><p class="note">${t.date}</p>
-    <button class="primary" style="background:var(--neg)" data-action="deltx" data-id="${t.id}">刪除這筆</button>
-    <button class="ghost" style="width:100%;margin-top:10px" data-action="close">保留</button>`);
+  const b0=S.buckets[0]?.id,b1=S.buckets[1]?.id||b0;
+  draft={editId:t.id,type:t.type,amount:String(t.amount),date:t.date,note:t.note||'',
+    catId:t.type==='expense'&&catById(t.catId)?t.catId:null,
+    mode:t.type==='income'?(t.mode||'pct'):'pct',target:(t.type==='income'&&t.target)||b0,
+    from:t.from||b0,to:t.to||b1};
+  openSheet(addHtml());
 }
 
 let tt=null;function toast(m){const el=document.getElementById('toast');el.textContent=m;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),1600)}
@@ -411,13 +428,13 @@ document.addEventListener('click',e=>{
     case 'cat':draft.catId=id;document.querySelectorAll('.cat').forEach(c=>c.setAttribute('aria-pressed',c.dataset.id===id));updateHint();break;
     case 'save':saveDraft();break;
     case 'tx':openTx(id);break;
-    case 'deltx':S.txns=S.txns.filter(t=>t.id!==id);persist();closeSheet();render();toast('已刪除');break;
+    case 'deltx':if(!confirm('確定刪除這筆紀錄？'))break;S.txns=S.txns.filter(t=>t.id!==id);persist();closeSheet();render();toast('已刪除');break;
     case 'jump':listBucket=el.dataset.bucket;tab='list';render();window.scrollTo(0,0);break;
     case 'lb':listBucket=el.dataset.b;render();break;
     case 'color':{const b=bucketById(id);b.color=PALETTE[(PALETTE.indexOf(b.color)+1)%PALETTE.length];persist();render();break}
     case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break;
     case 'delb':{
-      const used=S.txns.some(t=>t.bucketId===id||(t.alloc&&t.alloc[id])||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id);
+      const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id);
       if(S.buckets.length<=1){toast('至少要保留一個罐子');break}
       if(used){toast('這個罐子有紀錄或分類在用，先把分類改到別的罐子');break}
       S.buckets=S.buckets.filter(b=>b.id!==id);persist();render();break}
