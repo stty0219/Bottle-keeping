@@ -126,6 +126,8 @@ label.f > *{margin-top:4px}
 
 /* settings */
 .set-item{display:grid;grid-template-columns:34px 1fr 78px 36px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.set-item.amt-mode{grid-template-columns:34px 1fr 116px 36px}
+.plan-extra{display:grid;gap:8px;margin-top:10px}
 .set-item.cat-item{grid-template-columns:52px 1fr 1fr 36px}
 .swatch{width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1.5px var(--line)}
 .icon-btn{background:none;border:0;width:36px;height:36px;border-radius:10px;color:var(--muted);font-size:18px}
@@ -187,7 +189,7 @@ const LSK='fenguan-ledger-v1';
 
 /* ---------- local storage ---------- */
 function loadLocal(){try{const r=localStorage.getItem(LSK);return r?JSON.parse(r):null}catch(e){return null}}
-function saveLocal(){try{localStorage.setItem(LSK,JSON.stringify(S))}catch(e){}}
+function saveLocal(){planCache=null;try{localStorage.setItem(LSK,JSON.stringify(S))}catch(e){}}
 function setSync(t){document.getElementById('sync').textContent=t}
 const clean=o=>JSON.parse(JSON.stringify(o));
 
@@ -241,7 +243,7 @@ async function cloudConnect(){
     const q=await col.where('members','array-contains',u.uid).get();
     if(q.empty){
       const ref=col.doc();
-      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),
+      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,
         createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
       await writeTxns(ref,S.txns);
       lid=ref.id;toast('已把這台裝置的資料上傳到雲端');
@@ -269,7 +271,7 @@ function subscribe(ref){
     if(!snap.exists){fail({code:'permission-denied'});return}
     if(snap.metadata.hasPendingWrites)return;
     const d=snap.data();
-    S.buckets=d.buckets||[];S.categories=d.categories||[];S.ledgerName=d.name||'我的帳本';
+    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.ledgerName=d.name||'我的帳本';
     saveLocal();safeRender();
   },fail));
   Cloud.unsubs.push(ref.collection('txns').onSnapshot(qs=>{
@@ -295,7 +297,7 @@ function persist(){ // buckets & categories
   if(!cloudOn())return;
   clearTimeout(Cloud.metaTimer);
   Cloud.metaTimer=setTimeout(()=>{
-    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
       .catch(e=>{Cloud.err='設定沒有存到雲端：'+(e.message||e.code);renderIfSettings()});
     syncStatus();
   },600);
@@ -360,6 +362,18 @@ function accountHtml(){
     <button class="ghost" style="border:0;padding:4px;font-size:13px;color:var(--muted)" data-action="auth" data-k="resetpw">忘記密碼</button></div>`;
 }
 
+function setAllocMode(m){
+  if(S.allocMode===m||(m==='pct'&&!S.allocMode))return;
+  let filled=false;
+  if(m==='amount'&&planSum()===0){ // first switch: suggest amounts from the latest month's income
+    const pt=planTotals(),mk=Object.keys(pt).sort().pop(),T=mk?pt[mk]:0;
+    const tot=S.buckets.reduce((a,b)=>a+(+b.pct||0),0)||1;
+    if(T>0){S.buckets.forEach(b=>b.amt=Math.round(T*(+b.pct||0)/tot/100)*100);filled=true}
+    if(!bucketById(S.remainderId))S.remainderId=(S.buckets.find(b=>/彈性/.test(b.name))||S.buckets[S.buckets.length-1]).id;
+  }
+  S.allocMode=m;persist();render();
+  if(filled)toast('已依最近一個月的收入先填入建議金額，可以再調整');
+}
 function migrate(){
   for(const t of S.txns){
     if(t.type!=='income'||t.mode)continue;
@@ -411,7 +425,34 @@ function allocate(amount,mode,target){
   S.buckets.forEach((b,i)=>{const v=i===S.buckets.length-1?rem:Math.round(amount*(+b.pct||0)/tot);res[b.id]=v;rem-=v});
   return res;
 }
-function incAlloc(t){return t.mode==='one'?{[t.target]:t.amount}:allocate(t.amount,'pct')}
+const isPlan=t=>t.type==='income'&&t.mode!=='one';
+let planCache=null;
+function planTotals(excludeId){ // month -> total of plan-following income
+  if(!excludeId&&planCache)return planCache;
+  const m={};
+  for(const t of S.txns){if(isPlan(t)&&t.id!==excludeId){const k=t.date.slice(0,7);m[k]=(m[k]||0)+t.amount}}
+  if(!excludeId)planCache=m;
+  return m;
+}
+const planSum=()=>S.buckets.reduce((a,b)=>a+Math.max(0,+b.amt||0),0);
+function remainderBucket(){return bucketById(S.remainderId)||S.buckets[S.buckets.length-1]}
+function planAlloc(T){ // how one month's plan income is split
+  const res={};S.buckets.forEach(b=>res[b.id]=0);
+  if(T<=0||!S.buckets.length)return res;
+  if(S.allocMode!=='amount')return Object.assign(res,allocate(T,'pct'));
+  const rid=remainderBucket().id,P=planSum();
+  if(P<=0){res[rid]=T;return res}
+  if(T>=P){S.buckets.forEach(b=>res[b.id]=Math.max(0,+b.amt||0));res[rid]+=T-P;return res}
+  const bs=S.buckets.filter(b=>(+b.amt||0)>0);let rem=T;
+  bs.forEach((b,i)=>{const v=i===bs.length-1?rem:Math.round(T*b.amt/P);res[b.id]=v;rem-=v});
+  return res;
+}
+function incAlloc(t){ // this income's share of its month
+  if(t.mode==='one')return {[t.target]:t.amount};
+  const T=planTotals()[t.date.slice(0,7)]||t.amount,a=planAlloc(T),r={};
+  for(const k in a)r[k]=Math.round(a[k]*t.amount/T);
+  return r;
+}
 function stats(excludeId){
   const m=today().slice(0,7);
   const out={};
@@ -419,10 +460,12 @@ function stats(excludeId){
   for(const t of S.txns){
     if(t.id===excludeId)continue;
     const mon=t.date.slice(0,7)===m;
-    if(t.type==='income'){const al=incAlloc(t);for(const k in al){if(out[k]){out[k].in+=al[k];if(mon)out[k].monthIn+=al[k]}}}
+    if(t.type==='income'){if(t.mode==='one'&&out[t.target]){out[t.target].in+=t.amount;if(mon)out[t.target].monthIn+=t.amount}}
     else if(t.type==='expense'){if(out[t.bucketId]){out[t.bucketId].out+=t.amount;if(mon)out[t.bucketId].monthOut+=t.amount}}
     else if(t.type==='transfer'){if(out[t.from])out[t.from].out+=t.amount;if(out[t.to])out[t.to].in+=t.amount}
   }
+  const pt=planTotals(excludeId);
+  for(const mk in pt){const a=planAlloc(pt[mk]);for(const k in a){if(out[k]){out[k].in+=a[k];if(mk===m)out[k].monthIn+=a[k]}}}
   for(const k in out) out[k].bal=out[k].in-out[k].out;
   return out;
 }
@@ -443,7 +486,7 @@ function homeView(){
       <div class="jarpct num">${s.in>0?Math.round(ratio*100)+'%':'空'}</div></div>
       <div class="jarname">${esc(b.name)}</div>
       <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
-      <div class="jarsub">分配 ${+b.pct||0}%</div></button>`}).join('');
+      <div class="jarsub">${S.allocMode==='amount'?'每月 '+money(+b.amt||0):'分配 '+(+b.pct||0)+'%'}</div></button>`}).join('');
   const total=S.buckets.reduce((a,b)=>a+st[b.id].bal,0);
   const monthRows=S.buckets.map(b=>{const s=st[b.id];const base=Math.max(s.monthIn,s.monthOut,1);
     return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</span><span class="num">支出 ${money(s.monthOut)} ／ 進帳 ${money(s.monthIn)}</span></div>
@@ -459,7 +502,7 @@ function sortTx(a,b){return a.date<b.date?1:a.date>b.date?-1:(b.ts||0)-(a.ts||0)
 function txRow(t){
   let ic='💵',t1='',t2='',amt='',cls='';
   if(t.type==='expense'){const c=catById(t.catId);const b=bucketById(t.bucketId);ic=c?c.emoji:'🧾';t1=c?c.name:'已刪除分類';t2=`<span class="dot" style="background:${b?b.color:'#999'}"></span>${esc(b?b.name:'—')}${t.note?'｜'+esc(t.note):''}`;amt='−'+money(t.amount)}
-  else if(t.type==='income'){t1=t.note||'收入';t2=(t.mode==='one'?'全部放入・':'依比例・')+Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>{const b=bucketById(k);return b?`${esc(b.name)} ${money(v)}`:''}).filter(Boolean).join('、');amt='+'+money(t.amount);cls='in'}
+  else if(t.type==='income'){t1=t.note||'收入';t2=(t.mode==='one'?'全部放入・':(S.allocMode==='amount'?'依計畫・':'依比例・'))+Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>{const b=bucketById(k);return b?`${esc(b.name)} ${money(v)}`:''}).filter(Boolean).join('、');amt='+'+money(t.amount);cls='in'}
   else{const f=bucketById(t.from),to=bucketById(t.to);ic='🔁';t1=`${f?f.name:'—'} → ${to?to.name:'—'}`;t2=t.note?esc(t.note):'罐子間轉移';amt=money(t.amount)}
   return `<li><button class="tx" data-action="tx" data-id="${t.id}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div><div class="t2">${t2}</div></span><span class="amt num ${cls}">${amt}</span></button></li>`;
 }
@@ -485,10 +528,12 @@ function listView(){
 }
 function settingsView(){
   const sum=S.buckets.reduce((a,b)=>a+(+b.pct||0),0);
-  const bl=S.buckets.map(b=>`<div class="set-item">
+  const am=S.allocMode==='amount';
+  const bl=S.buckets.map(b=>`<div class="set-item ${am?'amt-mode':''}">
     <button class="swatch" style="background:${b.color}" data-action="color" data-id="${b.id}" aria-label="換顏色"></button>
     <input type="text" value="${esc(b.name)}" data-edit="bname" data-id="${b.id}" aria-label="罐子名稱">
-    <input type="number" inputmode="numeric" min="0" max="100" value="${b.pct}" data-edit="bpct" data-id="${b.id}" aria-label="分配比例">
+    ${am?`<input type="number" inputmode="numeric" min="0" step="100" value="${+b.amt||0}" data-edit="bamt" data-id="${b.id}" aria-label="每月金額">`
+      :`<input type="number" inputmode="numeric" min="0" max="100" value="${b.pct}" data-edit="bpct" data-id="${b.id}" aria-label="分配比例">`}
     <button class="icon-btn" data-action="delb" data-id="${b.id}" aria-label="刪除罐子">✕</button></div>`).join('');
   const opts=id=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
   const cl=S.categories.map(c=>`<div class="set-item cat-item">
@@ -497,10 +542,14 @@ function settingsView(){
     <select data-edit="cbucket" data-id="${c.id}" aria-label="扣款罐子">${opts(c.bucketId)}</select>
     <button class="icon-btn" data-action="delc" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
   return `<h2 style="margin-top:0">帳號與同步</h2>${accountHtml()}
-  <h2>罐子與分配比例</h2>
-  <p class="note">「依比例分配」的收入會跟著這裡的比例即時重新計算，包含過去的紀錄；「全部放入一罐」的收入不受影響。</p>
+  <h2>罐子與分配方式</h2>
+  <div class="seg" style="grid-template-columns:1fr 1fr;margin-bottom:10px"><button data-action="allocmode" data-m="amount" aria-pressed="${am}">每月金額</button><button data-action="allocmode" data-m="pct" aria-pressed="${!am}">比例</button></div>
+  <p class="note">${am?'設定每個罐子每月要放多少錢。同一個月的收入會加總後依計畫分配；修改金額會重新計算所有月份。':'每筆收入依比例分進各罐。修改比例會重新計算所有紀錄。'}「全部放入一罐」的收入不受影響。</p>
   ${bl}
-  <div class="pctsum ${sum===100?'':'bad'}">合計 ${sum}%${sum===100?'':'，建議調整到 100%（目前會依比例換算）'}</div>
+  ${am?`<div class="pctsum" id="plansum">每月計畫合計 <b class="num">${money(planSum())}</b></div>
+  <div class="plan-extra"><label class="f">收入超過計畫時，多出來的錢放入<select data-edit="remainder">${opts(remainderBucket()?.id)}</select></label>
+  <p class="note" style="margin:0">收入不足計畫時，會依各罐計畫金額等比例分配。</p></div>`
+  :`<div class="pctsum ${sum===100?'':'bad'}">合計 ${sum}%${sum===100?'':'，建議調整到 100%（目前會依比例換算）'}</div>`}
   <button class="ghost" style="margin-top:12px" data-action="addb">新增罐子</button>
   <h2>支出分類 → 扣款罐子</h2>
   <p class="note">選了分類，就會自動從對應的罐子扣錢。</p>
@@ -532,7 +581,7 @@ function addHtml(){
   if(d.type==='expense'){
     body=`<div class="cats">${S.categories.map(c=>{const b=bucketById(c.bucketId);return `<button class="cat" data-action="cat" data-id="${c.id}" aria-pressed="${d.catId===c.id}"><span class="e">${esc(c.emoji)}</span>${esc(c.name)}<span class="dot" style="background:${b?b.color:'#999'};margin:2px 0 0"></span></button>`}).join('')}</div>`;
   }else if(d.type==='income'){
-    body=`<div class="row2"><label class="f">分配方式<select id="mode"><option value="pct" ${d.mode==='pct'?'selected':''}>依比例分配</option><option value="one" ${d.mode==='one'?'selected':''}>全部放入一罐</option></select></label>
+    body=`<div class="row2"><label class="f">分配方式<select id="mode"><option value="pct" ${d.mode==='pct'?'selected':''}>${S.allocMode==='amount'?'依每月計畫分配':'依比例分配'}</option><option value="one" ${d.mode==='one'?'selected':''}>全部放入一罐</option></select></label>
     <label class="f ${d.mode==='one'?'':'hidden'}" id="tgtWrap">放入<select id="tgt">${opts(d.target)}</select></label></div>`;
   }else{
     body=`<div class="row2"><label class="f">從<select id="from">${opts(d.from)}</select></label><label class="f">到<select id="to">${opts(d.to)}</select></label></div>`;
@@ -552,7 +601,20 @@ function updateHint(){
     if(c){const b=bucketById(c.bucketId);const after=st[b.id].bal-amt;msg=`從「<b>${esc(b.name)}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
     else msg='選一個分類';
   }else if(d.type==='income'){
-    if(amt>0){const a=allocate(amt,d.mode,d.target);msg=Object.entries(a).filter(([,v])=>v).map(([k,v])=>`${esc(bucketById(k).name)} <b>${money(v)}</b>`).join('　')}
+    if(amt>0){
+      let a;
+      if(d.mode==='one')a=allocate(amt,'one',d.target);
+      else{
+        const mk=(d.date||today()).slice(0,7),T0=planTotals(d.editId)[mk]||0,a0=planAlloc(T0),a1=planAlloc(T0+amt);
+        a={};for(const k in a1)a[k]=a1[k]-(a0[k]||0);
+        if(S.allocMode==='amount'){
+          const P=planSum(),T=T0+amt;
+          const tail=P<=0?'還沒設定每月計畫金額，會全部放入「'+esc(remainderBucket().name)+'」':T>=P?(T>P?`本月收入 ${money(T)}，超過計畫 ${money(T-P)}，多的放入「${esc(remainderBucket().name)}」`:`本月收入剛好達到計畫 ${money(P)}`):`本月收入 ${money(T)}，還差 ${money(P-T)} 達到計畫，先依比例分配`;
+          msg='<br>'+tail;
+        }
+      }
+      msg=Object.entries(a).filter(([,v])=>v).map(([k,v])=>`${esc(bucketById(k).name)} <b>${v<0?'−':'+'}${money(Math.abs(v))}</b>`).join('　')+msg;
+    }
     else msg='輸入金額後會顯示分配結果';
   }else{
     ok=ok&&d.from!==d.to;
@@ -598,12 +660,13 @@ document.addEventListener('click',e=>{
     case 'jump':listBucket=el.dataset.bucket;tab='list';render();window.scrollTo(0,0);break;
     case 'lb':listBucket=el.dataset.b;render();break;
     case 'color':{const b=bucketById(id);b.color=PALETTE[(PALETTE.indexOf(b.color)+1)%PALETTE.length];persist();render();break}
-    case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break;
+    case 'allocmode':setAllocMode(el.dataset.m);break;
+    case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,amt:0,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break;
     case 'delb':{
       const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id);
       if(S.buckets.length<=1){toast('至少要保留一個罐子');break}
       if(used){toast('這個罐子有紀錄或分類在用，先把分類改到別的罐子');break}
-      S.buckets=S.buckets.filter(b=>b.id!==id);persist();render();break}
+      S.buckets=S.buckets.filter(b=>b.id!==id);if(S.remainderId===id)S.remainderId=S.buckets[S.buckets.length-1].id;persist();render();break}
     case 'addc':S.categories.push({id:uid(),emoji:'🏷️',name:'新分類',bucketId:S.buckets[0].id});persist();render();break;
     case 'delc':S.categories=S.categories.filter(c=>c.id!==id);persist();render();break;
     case 'export':exportData();break;
@@ -623,6 +686,7 @@ document.addEventListener('input',e=>{
   const ed=t.dataset.edit;if(!ed)return;
   if(ed==='bname')bucketById(t.dataset.id).name=t.value;
   if(ed==='bpct'){bucketById(t.dataset.id).pct=Math.max(0,Math.min(100,parseInt(t.value)||0));const sum=S.buckets.reduce((a,b)=>a+(+b.pct||0),0);const ps=document.querySelector('.pctsum');if(ps){ps.textContent='合計 '+sum+'%'+(sum===100?'':'，建議調整到 100%（目前會依比例換算）');ps.classList.toggle('bad',sum!==100)}}
+  if(ed==='bamt'){bucketById(t.dataset.id).amt=Math.max(0,parseInt(t.value)||0);const ps=document.querySelector('#plansum b');if(ps)ps.textContent=money(planSum())}
   if(ed==='cemoji')catById(t.dataset.id).emoji=t.value;
   if(ed==='cname')catById(t.dataset.id).name=t.value;
   persist();
@@ -632,14 +696,15 @@ document.addEventListener('change',e=>{
   if(t.id==='importFile'&&t.files[0]){importData(t.files[0]);t.value='';return}
   if(t.id==='lm'){listMonth=t.value||today().slice(0,7);render();return}
   if(draft){
-    if(t.id==='date'){draft.date=t.value;return}
+    if(t.id==='date'){draft.date=t.value;updateHint();return}
     if(t.id==='mode'){draft.mode=t.value;document.getElementById('tgtWrap').classList.toggle('hidden',t.value!=='one');updateHint();return}
     if(t.id==='tgt'){draft.target=t.value;updateHint();return}
     if(t.id==='from'){draft.from=t.value;updateHint();return}
     if(t.id==='to'){draft.to=t.value;updateHint();return}
   }
   if(t.dataset.edit==='cbucket'){catById(t.dataset.id).bucketId=t.value;persist();render()}
-  if(t.dataset.edit==='bname'||t.dataset.edit==='bpct')render();
+  if(t.dataset.edit==='remainder'){S.remainderId=t.value;persist();render();return}
+  if(t.dataset.edit==='bname'||t.dataset.edit==='bpct'||t.dataset.edit==='bamt')render();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){const b=document.getElementById('saveBtn');if(b&&!b.disabled)saveDraft()}});
 const obs=new MutationObserver(()=>{if(draft&&document.getElementById('hint')&&!document.getElementById('hint').dataset.init){document.getElementById('hint').dataset.init=1;updateHint()}});
