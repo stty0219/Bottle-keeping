@@ -127,6 +127,14 @@ label.f > *{margin-top:4px}
 /* settings */
 .set-item{display:grid;grid-template-columns:34px 1fr 78px 36px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .set-item.amt-mode{grid-template-columns:34px 1fr 116px 36px}
+.mnav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 4px}
+.mnav button.arr{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;width:42px;height:40px;font-size:18px}
+.mnav button.arr:disabled{opacity:.3}
+.mlabel{position:relative;font-weight:700;font-size:18px;text-align:center;flex:1}
+.mlabel input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}
+.carry{grid-column:2/-1;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:-2px}
+.carry input{width:18px;height:18px;accent-color:var(--ink)}
+.more{display:block;width:100%;margin-top:10px;text-align:center;background:none;border:0;color:var(--muted);font-size:14px;padding:10px}
 .plan-extra{display:grid;gap:8px;margin-top:10px}
 .set-item.cat-item{grid-template-columns:52px 1fr 1fr 36px}
 .swatch{width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1.5px var(--line)}
@@ -453,20 +461,30 @@ function incAlloc(t){ // this income's share of its month
   for(const k in a)r[k]=Math.round(a[k]*t.amount/T);
   return r;
 }
-function stats(excludeId){
-  const m=today().slice(0,7);
-  const out={};
-  S.buckets.forEach(b=>out[b.id]={in:0,out:0,monthOut:0,monthIn:0});
+const curMonth=()=>today().slice(0,7);
+function shiftMonth(mk,d){const [y,m]=mk.split('-').map(Number);const dt=new Date(y,m-1+d,1);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')}
+const carries=b=>b.carry!==false;
+// balances for one month: open (carried in) + this month's in − out
+function stats(excludeId,month){
+  month=month||curMonth();
+  const per={};S.buckets.forEach(b=>per[b.id]={});
+  const add=(id,mk,f,v)=>{const p=per[id];if(!p)return;(p[mk]||(p[mk]={i:0,o:0}))[f]+=v};
   for(const t of S.txns){
     if(t.id===excludeId)continue;
-    const mon=t.date.slice(0,7)===m;
-    if(t.type==='income'){if(t.mode==='one'&&out[t.target]){out[t.target].in+=t.amount;if(mon)out[t.target].monthIn+=t.amount}}
-    else if(t.type==='expense'){if(out[t.bucketId]){out[t.bucketId].out+=t.amount;if(mon)out[t.bucketId].monthOut+=t.amount}}
-    else if(t.type==='transfer'){if(out[t.from])out[t.from].out+=t.amount;if(out[t.to])out[t.to].in+=t.amount}
+    const mk=t.date.slice(0,7);if(mk>month)continue;
+    if(t.type==='income'){if(t.mode==='one')add(t.target,mk,'i',t.amount)}
+    else if(t.type==='expense')add(t.bucketId,mk,'o',t.amount);
+    else if(t.type==='transfer'){add(t.from,mk,'o',t.amount);add(t.to,mk,'i',t.amount)}
   }
   const pt=planTotals(excludeId);
-  for(const mk in pt){const a=planAlloc(pt[mk]);for(const k in a){if(out[k]){out[k].in+=a[k];if(mk===m)out[k].monthIn+=a[k]}}}
-  for(const k in out) out[k].bal=out[k].in-out[k].out;
+  for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk]);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
+  const out={};
+  for(const b of S.buckets){
+    let open=0;
+    if(carries(b))for(const mk in per[b.id])if(mk<month)open+=per[b.id][mk].i-per[b.id][mk].o;
+    const cur=per[b.id][month]||{i:0,o:0};
+    out[b.id]={open,monthIn:cur.i,monthOut:cur.o,bal:open+cur.i-cur.o};
+  }
   return out;
 }
 
@@ -477,26 +495,37 @@ function render(){
   v.innerHTML=tab==='home'?homeView():tab==='list'?listView():settingsView();
 }
 
+function monthNav(){
+  const [y,m]=listMonth.split('-').map(Number);
+  const latest=S.txns.reduce((a,t)=>t.date.slice(0,7)>a?t.date.slice(0,7):a,curMonth());
+  return `<div class="mnav"><button class="arr" data-action="mshift" data-d="-1" aria-label="上個月">‹</button>
+    <div class="mlabel">${y} 年 ${m} 月<input type="month" id="hm" value="${listMonth}" aria-label="選擇月份"></div>
+    <button class="arr" data-action="mshift" data-d="1" aria-label="下個月" ${listMonth>=latest?'disabled':''}>›</button></div>`;
+}
 function homeView(){
-  const st=stats();
+  const st=stats(null,listMonth);
   const jars=S.buckets.map(b=>{
-    const s=st[b.id];const ratio=s.in>0?Math.max(0,Math.min(1,s.bal/s.in)):0;
-    return `<button class="jarcol" data-action="jump" data-bucket="${b.id}" aria-label="${esc(b.name)}，餘額 ${money(s.bal)}">
+    const s=st[b.id];const avail=Math.max(0,s.open)+s.monthIn;
+    const ratio=avail>0?Math.max(0,Math.min(1,s.bal/avail)):0;
+    const sub=carries(b)?(s.open?`上月結轉 ${money(s.open)}`:'會結轉'):'每月歸零';
+    return `<button class="jarcol" data-action="jump" data-bucket="${b.id}" aria-label="${esc(b.name)}，月底餘額 ${money(s.bal)}">
       <div class="jar ${s.bal<0?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${b.color}"></div>
-      <div class="jarpct num">${s.in>0?Math.round(ratio*100)+'%':'空'}</div></div>
+      <div class="jarpct num">${avail>0?Math.round(ratio*100)+'%':'空'}</div></div>
       <div class="jarname">${esc(b.name)}</div>
       <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
-      <div class="jarsub">${S.allocMode==='amount'?'每月 '+money(+b.amt||0):'分配 '+(+b.pct||0)+'%'}</div></button>`}).join('');
+      <div class="jarsub">${sub}</div></button>`}).join('');
   const total=S.buckets.reduce((a,b)=>a+st[b.id].bal,0);
-  const monthRows=S.buckets.map(b=>{const s=st[b.id];const base=Math.max(s.monthIn,s.monthOut,1);
-    return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</span><span class="num">支出 ${money(s.monthOut)} ／ 進帳 ${money(s.monthIn)}</span></div>
-    <div class="bar"><i style="width:${Math.min(100,s.monthOut/base*100)}%;background:${b.color}"></i></div></div>`}).join('');
-  const recent=[...S.txns].sort(sortTx).slice(0,6);
-  const empty=S.txns.length===0?`<div class="empty">先記一筆收入，錢會依比例分進各個罐子。</div>`:'';
-  return `<div class="shelf">${jars}</div>
-  <div class="total"><span>所有罐子合計</span><b class="num ${total<0?'neg':''}">${money(total)}</b></div>
+  const monthRows=S.buckets.map(b=>{const s=st[b.id];const avail=Math.max(0,s.open)+s.monthIn;const base=Math.max(avail,s.monthOut,1);
+    return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</span><span class="num">花了 ${money(s.monthOut)} ／ 可用 ${money(avail)}</span></div>
+    <div class="bar"><i style="width:${Math.min(100,s.monthOut/base*100)}%;background:${s.monthOut>avail?'var(--neg)':b.color}"></i></div></div>`}).join('');
+  const items=S.txns.filter(t=>t.date.slice(0,7)===listMonth).sort(sortTx);
+  const isNow=listMonth===curMonth();
+  const empty=S.txns.length===0?`<div class="empty">先記一筆收入，錢會依計畫分進各個罐子。</div>`:'';
+  return `${monthNav()}<div class="shelf">${jars}</div>
+  <div class="total"><span>${isNow?'目前':'月底'}所有罐子合計</span><b class="num ${total<0?'neg':''}">${money(total)}</b></div>
   ${empty}
-  ${S.txns.length?`<h2>本月各罐</h2><div class="month-row">${monthRows}</div><h2>最近紀錄</h2><ul class="txs">${recent.map(txRow).join('')}</ul>`:''}`;
+  ${S.txns.length?`<h2>這個月各罐</h2><div class="month-row">${monthRows}</div>
+  <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(txRow).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
 }
 function sortTx(a,b){return a.date<b.date?1:a.date>b.date?-1:(b.ts||0)-(a.ts||0)}
 function txRow(t){
@@ -534,7 +563,8 @@ function settingsView(){
     <input type="text" value="${esc(b.name)}" data-edit="bname" data-id="${b.id}" aria-label="罐子名稱">
     ${am?`<input type="number" inputmode="numeric" min="0" step="100" value="${+b.amt||0}" data-edit="bamt" data-id="${b.id}" aria-label="每月金額">`
       :`<input type="number" inputmode="numeric" min="0" max="100" value="${b.pct}" data-edit="bpct" data-id="${b.id}" aria-label="分配比例">`}
-    <button class="icon-btn" data-action="delb" data-id="${b.id}" aria-label="刪除罐子">✕</button></div>`).join('');
+    <button class="icon-btn" data-action="delb" data-id="${b.id}" aria-label="刪除罐子">✕</button>
+    <label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${carries(b)?'checked':''}>沒用完的錢結轉到下個月</label></div>`).join('');
   const opts=id=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
   const cl=S.categories.map(c=>`<div class="set-item cat-item">
     <input type="text" value="${esc(c.emoji)}" data-edit="cemoji" data-id="${c.id}" aria-label="圖示" style="text-align:center">
@@ -544,7 +574,7 @@ function settingsView(){
   return `<h2 style="margin-top:0">帳號與同步</h2>${accountHtml()}
   <h2>罐子與分配方式</h2>
   <div class="seg" style="grid-template-columns:1fr 1fr;margin-bottom:10px"><button data-action="allocmode" data-m="amount" aria-pressed="${am}">每月金額</button><button data-action="allocmode" data-m="pct" aria-pressed="${!am}">比例</button></div>
-  <p class="note">${am?'設定每個罐子每月要放多少錢。同一個月的收入會加總後依計畫分配；修改金額會重新計算所有月份。':'每筆收入依比例分進各罐。修改比例會重新計算所有紀錄。'}「全部放入一罐」的收入不受影響。</p>
+  <p class="note">${am?'設定每個罐子每月要放多少錢。同一個月的收入會加總後依計畫分配；修改金額會重新計算所有月份。':'每筆收入依比例分進各罐。修改比例會重新計算所有紀錄。'}「全部放入一罐」的收入不受影響。不結轉的罐子每月從零開始，剩下或超支的金額都不會帶到下個月。</p>
   ${bl}
   ${am?`<div class="pctsum" id="plansum">每月計畫合計 <b class="num">${money(planSum())}</b></div>
   <div class="plan-extra"><label class="f">收入超過計畫時，多出來的錢放入<select data-edit="remainder">${opts(remainderBucket()?.id)}</select></label>
@@ -595,7 +625,7 @@ function addHtml(){
 }
 function updateHint(){
   const d=draft;if(!d)return;const h=document.getElementById('hint');const btn=document.getElementById('saveBtn');
-  const amt=Math.round(+d.amount||0);const st=stats(d.editId);let ok=amt>0,msg='';
+  const amt=Math.round(+d.amount||0);const st=stats(d.editId,(d.date||today()).slice(0,7));let ok=amt>0,msg='';
   if(d.type==='expense'){
     const c=catById(d.catId);ok=ok&&!!c;
     if(c){const b=bucketById(c.bucketId);const after=st[b.id].bal-amt;msg=`從「<b>${esc(b.name)}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
@@ -657,6 +687,8 @@ document.addEventListener('click',e=>{
     case 'save':saveDraft();break;
     case 'tx':openTx(id);break;
     case 'deltx':if(!confirm('確定刪除這筆紀錄？'))break;removeTxn(id);closeSheet();render();toast('已刪除');break;
+    case 'mshift':listMonth=shiftMonth(listMonth,+el.dataset.d);render();break;
+    case 'tolist':listBucket='all';tab='list';render();window.scrollTo(0,0);break;
     case 'jump':listBucket=el.dataset.bucket;tab='list';render();window.scrollTo(0,0);break;
     case 'lb':listBucket=el.dataset.b;render();break;
     case 'color':{const b=bucketById(id);b.color=PALETTE[(PALETTE.indexOf(b.color)+1)%PALETTE.length];persist();render();break}
@@ -683,7 +715,7 @@ document.addEventListener('input',e=>{
     if(t.id==='amt'){t.value=t.value.replace(/[^0-9]/g,'');draft.amount=t.value;updateHint();return}
     if(t.id==='note'){draft.note=t.value;return}
   }
-  const ed=t.dataset.edit;if(!ed)return;
+  const ed=t.dataset.edit;if(!ed||ed==='bcarry')return;
   if(ed==='bname')bucketById(t.dataset.id).name=t.value;
   if(ed==='bpct'){bucketById(t.dataset.id).pct=Math.max(0,Math.min(100,parseInt(t.value)||0));const sum=S.buckets.reduce((a,b)=>a+(+b.pct||0),0);const ps=document.querySelector('.pctsum');if(ps){ps.textContent='合計 '+sum+'%'+(sum===100?'':'，建議調整到 100%（目前會依比例換算）');ps.classList.toggle('bad',sum!==100)}}
   if(ed==='bamt'){bucketById(t.dataset.id).amt=Math.max(0,parseInt(t.value)||0);const ps=document.querySelector('#plansum b');if(ps)ps.textContent=money(planSum())}
@@ -694,7 +726,8 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='importFile'&&t.files[0]){importData(t.files[0]);t.value='';return}
-  if(t.id==='lm'){listMonth=t.value||today().slice(0,7);render();return}
+  if(t.id==='lm'||t.id==='hm'){listMonth=t.value||curMonth();render();return}
+  if(t.dataset.edit==='bcarry'){bucketById(t.dataset.id).carry=t.checked;persist();render();return}
   if(draft){
     if(t.id==='date'){draft.date=t.value;updateHint();return}
     if(t.id==='mode'){draft.mode=t.value;document.getElementById('tgtWrap').classList.toggle('hidden',t.value!=='one');updateHint();return}
