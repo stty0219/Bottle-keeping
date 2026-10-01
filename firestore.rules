@@ -3,19 +3,25 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function isMember(lid) {
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // ---------- 個人帳本（只有自己） ----------
+    function isLedgerMember(lid) {
       return signedIn() &&
         request.auth.uid in get(/databases/$(database)/documents/ledgers/$(lid)).data.members;
     }
-
     match /ledgers/{lid} {
-      // 只有帳本成員能讀取
       allow read: if signedIn() && request.auth.uid in resource.data.members;
-      // 建立帳本時，自己必須是擁有者、也是唯一成員
       allow create: if signedIn()
         && request.resource.data.owner == request.auth.uid
         && request.resource.data.members == [request.auth.uid];
-      // 成員可以改罐子與分類，但不能改擁有者和成員名單（第二階段共享時再開放）
       allow update: if signedIn()
         && request.auth.uid in resource.data.members
         && request.resource.data.owner == resource.data.owner
@@ -23,8 +29,70 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
 
       match /txns/{tid} {
-        allow read, write: if isMember(lid);
+        allow read, write: if isLedgerMember(lid);
       }
+    }
+
+    // ---------- 共用罐子 ----------
+    function jarData(jid) { return get(/databases/$(database)/documents/jars/$(jid)).data; }
+    function isJarMember(jid) { return signedIn() && request.auth.uid in jarData(jid).members; }
+
+    match /jars/{jid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      // 建立時，自己必須是擁有者，也是唯一成員
+      allow create: if signedIn()
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.members == [request.auth.uid];
+      allow update: if signedIn() && (
+        // 擁有者：可以改名稱、顏色、分類、移除成員，但不能轉移擁有者或把自己移出
+        (resource.data.owner == request.auth.uid
+          && request.resource.data.owner == resource.data.owner
+          && request.auth.uid in request.resource.data.members)
+        // 成員：只能修改共用分類
+        || (request.auth.uid in resource.data.members
+          && changed().hasOnly(['categories', 'updatedAt']))
+        // 成員：退出共用（只能移除自己）
+        || (request.auth.uid in resource.data.members
+          && request.auth.uid != resource.data.owner
+          && changed().hasOnly(['members', 'memberInfo', 'updatedAt'])
+          && request.resource.data.members == resource.data.members.removeAll([request.auth.uid]))
+        // 受邀者：有邀請、Email 已驗證，才能把自己加入成員
+        || (verifiedEmail()
+          && exists(/databases/$(database)/documents/invites/$(myEmail() + '_' + jid))
+          && !(request.auth.uid in resource.data.members)
+          && changed().hasOnly(['members', 'memberInfo', 'updatedAt'])
+          && request.resource.data.members == resource.data.members.concat([request.auth.uid]))
+      );
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+
+      match /txns/{tid} {
+        allow read: if isJarMember(jid);
+        // 每筆紀錄都標記是誰記的，只能用自己的身分新增
+        allow create: if isJarMember(jid) && request.resource.data.by == request.auth.uid;
+        // 只有記錄的人能修改
+        allow update: if isJarMember(jid)
+          && resource.data.by == request.auth.uid
+          && request.resource.data.by == request.auth.uid;
+        // 記錄的人可以刪除；擁有者刪除整個罐子時可以清除所有紀錄
+        allow delete: if isJarMember(jid)
+          && (resource.data.by == request.auth.uid || jarData(jid).owner == request.auth.uid);
+      }
+    }
+
+    // ---------- 共用邀請 ----------
+    match /invites/{iid} {
+      allow read: if signedIn() && (
+        resource.data.owner == request.auth.uid
+        || (verifiedEmail() && resource.data.email == myEmail()));
+      // 只有罐子的擁有者能發邀請，文件 ID 必須是「Email_罐子ID」
+      allow create: if signedIn()
+        && request.resource.data.owner == request.auth.uid
+        && jarData(request.resource.data.jid).owner == request.auth.uid
+        && iid == request.resource.data.email + '_' + request.resource.data.jid;
+      // 發出邀請的人可以取消；受邀者可以接受或婉拒
+      allow delete: if signedIn() && (
+        resource.data.owner == request.auth.uid
+        || (verifiedEmail() && resource.data.email == myEmail()));
     }
   }
 }
