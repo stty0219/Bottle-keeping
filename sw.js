@@ -1,4 +1,4 @@
-const CACHE='fenguan-v6';
+const CACHE='fenguan-v7';
 const CORE=['./','./index.html','./firebase-config.js','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png'];
 // 只快取 App 本身、字型和 Firebase SDK；Firebase 的登入與資料連線一律直接走網路
 const CACHE_HOSTS=['www.gstatic.com','fonts.googleapis.com','fonts.gstatic.com'];

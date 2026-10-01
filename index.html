@@ -135,6 +135,14 @@ label.f > *{margin-top:4px}
 .carry{grid-column:2/-1;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:-2px}
 .carry input{width:18px;height:18px;accent-color:var(--ink)}
 .more{display:block;width:100%;margin-top:10px;text-align:center;background:none;border:0;color:var(--muted);font-size:14px;padding:10px}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--ink);color:var(--bg);vertical-align:2px;margin-left:4px}
+.jhead{display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center}
+.jarcard .sub{font-size:13px;font-weight:700;margin-top:4px}
+.mem{display:flex;justify-content:space-between;align-items:center;font-size:14px;min-height:32px}
+.invrow{display:grid;grid-template-columns:1fr auto;gap:8px}
+.set-item.jc{grid-template-columns:52px 1fr 36px;border-bottom:1px solid var(--line)}
+.invite{border-color:var(--ink);margin-bottom:12px}
+.catgroup{font-size:12px;color:var(--muted);margin:14px 0 -6px}
 .plan-extra{display:grid;gap:8px;margin-top:10px}
 .set-item.cat-item{grid-template-columns:52px 1fr 1fr 36px}
 .swatch{width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1.5px var(--line)}
@@ -202,7 +210,8 @@ function setSync(t){document.getElementById('sync').textContent=t}
 const clean=o=>JSON.parse(JSON.stringify(o));
 
 /* ---------- cloud (Firebase) ---------- */
-const Cloud={ready:false,user:null,fs:null,auth:null,ref:null,unsubs:[],metaTimer:null,err:'',busy:false};
+const Cloud={ready:false,user:null,fs:null,auth:null,ref:null,unsubs:[],metaTimer:null,err:'',busy:false,
+  ledgerLoaded:false,jars:{},jarTxns:{},jarLoaded:{},jarUnsubs:{},jarsUnsub:null,inviteUnsubs:[],invites:[],sent:[],jarTimers:{},jarsLoaded:false};
 function cloudConfigured(){return !!(window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.apiKey&&window.firebase)}
 function cloudOn(){return !!(Cloud.user&&Cloud.ref)}
 function syncStatus(){
@@ -228,7 +237,10 @@ function cloudInit(){
     });
   }catch(e){Cloud.err='Firebase 設定有誤：'+e.message}
 }
-function cloudStop(){Cloud.unsubs.forEach(f=>{try{f()}catch(e){}});Cloud.unsubs=[];Cloud.ref=null}
+function cloudStop(){
+  Cloud.unsubs.forEach(f=>{try{f()}catch(e){}});Cloud.unsubs=[];Cloud.ref=null;Cloud.ledgerLoaded=false;
+  stopJars();
+}
 
 async function writeTxns(ref,txns){
   for(let i=0;i<txns.length;i+=400){
@@ -251,7 +263,7 @@ async function cloudConnect(){
     const q=await col.where('members','array-contains',u.uid).get();
     if(q.empty){
       const ref=col.doc();
-      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,
+      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),
         createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
       await writeTxns(ref,S.txns);
       lid=ref.id;toast('已把這台裝置的資料上傳到雲端');
@@ -279,12 +291,14 @@ function subscribe(ref){
     if(!snap.exists){fail({code:'permission-denied'});return}
     if(snap.metadata.hasPendingWrites)return;
     const d=snap.data();
-    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.ledgerName=d.name||'我的帳本';
+    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.jarPlan=d.jarPlan||{};S.ledgerName=d.name||'我的帳本';
     saveLocal();safeRender();
+    if(!Cloud.ledgerLoaded){Cloud.ledgerLoaded=true;startJars()}
+    scheduleMirror();
   },fail));
   Cloud.unsubs.push(ref.collection('txns').onSnapshot(qs=>{
     S.txns=qs.docs.map(d=>Object.assign({},d.data(),{id:d.id}));
-    saveLocal();safeRender();syncStatus();
+    saveLocal();safeRender();syncStatus();scheduleMirror();
   },fail));
   renderIfSettings();syncStatus();
 }
@@ -305,19 +319,19 @@ function persist(){ // buckets & categories
   if(!cloudOn())return;
   clearTimeout(Cloud.metaTimer);
   Cloud.metaTimer=setTimeout(()=>{
-    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
       .catch(e=>{Cloud.err='設定沒有存到雲端：'+(e.message||e.code);renderIfSettings()});
-    syncStatus();
+    syncStatus();scheduleMirror();
   },600);
 }
 function putTxn(t){
   const i=S.txns.findIndex(x=>x.id===t.id);if(i>=0)S.txns[i]=t;else S.txns.push(t);
   saveLocal();
-  if(cloudOn()){const {id,...rest}=t;Cloud.ref.collection('txns').doc(id).set(clean(rest)).catch(e=>toast('雲端儲存失敗：'+(e.code||'')));syncStatus()}
+  if(cloudOn()){const {id,...rest}=t;Cloud.ref.collection('txns').doc(id).set(clean(rest)).catch(e=>toast('雲端儲存失敗：'+(e.code||'')));syncStatus();scheduleMirror()}
 }
 function removeTxn(id){
   S.txns=S.txns.filter(t=>t.id!==id);saveLocal();
-  if(cloudOn()){Cloud.ref.collection('txns').doc(id).delete().catch(()=>{});syncStatus()}
+  if(cloudOn()){Cloud.ref.collection('txns').doc(id).delete().catch(()=>{});syncStatus();scheduleMirror()}
 }
 async function replaceAll(data){ // import / reset
   const keep={ledgerId:S.ledgerId,ledgerOwner:S.ledgerOwner,ledgerName:S.ledgerName};
@@ -328,6 +342,206 @@ async function replaceAll(data){ // import / reset
     catch(e){toast('雲端更新失敗：'+(e.code||''))}
     syncStatus();
   }
+}
+
+/* ---------- shared jars ---------- */
+const FV=()=>firebase.firestore.FieldValue;
+const myUid=()=>Cloud.user&&Cloud.user.uid;
+const myEmail=()=>((Cloud.user&&Cloud.user.email)||'').toLowerCase();
+const myName=()=>(Cloud.user&&(Cloud.user.displayName||(Cloud.user.email||'').split('@')[0]))||'我';
+const jarsList=()=>Object.keys(Cloud.jars).map(id=>Object.assign({id},Cloud.jars[id])).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+const isMirror=t=>t.kind==='contrib'||(t.id||'').startsWith('m_');
+function nameOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return (j?j.name:((S.jarPlan||{})[sjId(id)]||{}).name||'共用罐')+'（共用）'}const b=bucketById(id);return b?b.name:'—'}
+function colorOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return j?j.color:'#999'}const b=bucketById(id);return b?b.color:'#999'}
+function memberName(j,uid){const m=(j.memberInfo||{})[uid];return m?(m.name||m.email):'成員'}
+
+function stopJars(){
+  if(Cloud.jarsUnsub){try{Cloud.jarsUnsub()}catch(e){}}Cloud.jarsUnsub=null;
+  for(const id in Cloud.jarUnsubs){try{Cloud.jarUnsubs[id]()}catch(e){}}
+  Cloud.inviteUnsubs.forEach(f=>{try{f()}catch(e){}});
+  Object.assign(Cloud,{jars:{},jarTxns:{},jarLoaded:{},jarUnsubs:{},inviteUnsubs:[],invites:[],sent:[],jarsLoaded:false});
+}
+function startJars(){
+  if(!cloudOn()||Cloud.jarsUnsub)return;
+  const uidv=myUid();
+  Cloud.jarsUnsub=Cloud.fs.collection('jars').where('members','array-contains',uidv).onSnapshot(qs=>{
+    const seen={};
+    qs.docs.forEach(d=>{
+      seen[d.id]=1;
+      if(!(d.metadata.hasPendingWrites&&Cloud.jars[d.id]))Cloud.jars[d.id]=d.data();
+      if(!Cloud.jarUnsubs[d.id])watchJarTxns(d.id);
+    });
+    for(const id in Cloud.jars)if(!seen[id]){delete Cloud.jars[id];if(Cloud.jarUnsubs[id]){Cloud.jarUnsubs[id]();delete Cloud.jarUnsubs[id]}delete Cloud.jarTxns[id];delete Cloud.jarLoaded[id]}
+    // keep my contribution plan in step with membership
+    let changed=false;S.jarPlan=S.jarPlan||{};
+    for(const id in Cloud.jars){const jp=S.jarPlan[id];
+      if(!jp){S.jarPlan[id]={from:curMonth(),amt:0,pct:0,name:Cloud.jars[id].name};changed=true}
+      else if(jp.until||jp.name!==Cloud.jars[id].name){if(jp.until&&jp.until<=curMonth())jp.from=curMonth();delete jp.until;jp.name=Cloud.jars[id].name;changed=true}}
+    if(!qs.metadata.fromCache){
+      for(const id in S.jarPlan){if(!Cloud.jars[id]&&!S.jarPlan[id].until){S.jarPlan[id].until=shiftMonth(curMonth(),1);changed=true}}
+    }
+    Cloud.jarsLoaded=true;
+    if(changed)persist();
+    safeRender();scheduleMirror();
+  },e=>{Cloud.err='共用罐同步中斷：'+(e.code||e.message);renderIfSettings()});
+  watchInvites();
+}
+function watchJarTxns(jid){
+  Cloud.jarUnsubs[jid]=Cloud.fs.collection('jars').doc(jid).collection('txns').onSnapshot(qs=>{
+    Cloud.jarTxns[jid]=qs.docs.map(d=>Object.assign({},d.data(),{id:d.id,jid}));
+    Cloud.jarLoaded[jid]=true;safeRender();scheduleMirror();
+  },()=>{});
+}
+function watchInvites(){
+  Cloud.inviteUnsubs.forEach(f=>{try{f()}catch(e){}});Cloud.inviteUnsubs=[];
+  const col=Cloud.fs.collection('invites');
+  Cloud.inviteUnsubs.push(col.where('owner','==',myUid()).onSnapshot(qs=>{Cloud.sent=qs.docs.map(d=>Object.assign({id:d.id},d.data()));renderIfSettings()},()=>{}));
+  if(Cloud.user.emailVerified&&myEmail()){
+    Cloud.inviteUnsubs.push(col.where('email','==',myEmail()).onSnapshot(qs=>{Cloud.invites=qs.docs.map(d=>Object.assign({id:d.id},d.data()));safeRender()},()=>{}));
+  }
+}
+
+/* contributions and transfers I make are mirrored into the shared jar so every member sees them */
+function desiredMirrors(jid){
+  const me=myUid(),nm=myName(),key=SJ+jid,jp=(S.jarPlan||{})[jid],res={};
+  const pt=planTotals();
+  for(const mk in pt){if(!jarActive(jp,mk))continue;const v=planAlloc(pt[mk],mk)[key]||0;
+    if(v>0)res['contrib_'+me+'_'+mk]={kind:'contrib',amount:v,date:mk+'-01',note:'',by:me,byName:nm}}
+  for(const t of S.txns){
+    if(t.type==='transfer'&&t.to===key)res['m_'+t.id]={kind:'in',amount:t.amount,date:t.date,note:t.note||'',by:me,byName:nm,src:nameOf(t.from)};
+    else if(t.type==='transfer'&&t.from===key)res['m_'+t.id]={kind:'withdraw',amount:t.amount,date:t.date,note:t.note||'',by:me,byName:nm,src:nameOf(t.to)};
+    else if(t.type==='income'&&t.mode==='one'&&t.target===key)res['m_'+t.id]={kind:'in',amount:t.amount,date:t.date,note:t.note||'收入',by:me,byName:nm,src:''};
+  }
+  return res;
+}
+let mirrorTimer=null;
+function scheduleMirror(){clearTimeout(mirrorTimer);mirrorTimer=setTimeout(syncMirrors,1200)}
+function syncMirrors(){
+  if(!cloudOn()||!Cloud.ledgerLoaded||!Cloud.jarsLoaded)return;
+  const me=myUid(),sig=t=>[t.kind,t.amount,t.date,t.note||'',t.byName||'',t.src||''].join('|');
+  for(const jid in Cloud.jars){
+    if(!Cloud.jarLoaded[jid])continue;
+    const want=desiredMirrors(jid),have={};
+    (Cloud.jarTxns[jid]||[]).forEach(t=>{if(t.by===me&&isMirror(t))have[t.id]=t});
+    const col=Cloud.fs.collection('jars').doc(jid).collection('txns');
+    for(const id in want)if(!have[id]||sig(have[id])!==sig(want[id]))col.doc(id).set(want[id]).catch(()=>{});
+    for(const id in have)if(!want[id])col.doc(id).delete().catch(()=>{});
+  }
+}
+
+/* jar management */
+async function createJar(){
+  if(!cloudOn())return;
+  const ref=Cloud.fs.collection('jars').doc();
+  const used=S.buckets.map(b=>b.color).concat(jarsList().map(j=>j.color));
+  const color=PALETTE.find(c=>!used.includes(c))||PALETTE[3];
+  const data={name:'共用罐',color,owner:myUid(),members:[myUid()],memberInfo:{[myUid()]:{name:myName(),email:myEmail()}},
+    categories:[{id:uid(),emoji:'🏠',name:'房租'},{id:uid(),emoji:'🛒',name:'家用'},{id:uid(),emoji:'🍽️',name:'聚餐'}],
+    createdAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()};
+  S.jarPlan=S.jarPlan||{};S.jarPlan[ref.id]={from:curMonth(),amt:0,pct:0,name:data.name};
+  Cloud.jars[ref.id]=data;persist();render();
+  try{await ref.set(data);toast('已建立共用罐，可以改名並邀請對方')}catch(e){toast('建立失敗：'+(e.code||''))}
+}
+function saveJarMeta(jid,fields){
+  clearTimeout(Cloud.jarTimers[jid]);
+  Cloud.jarTimers[jid]=setTimeout(()=>{
+    const j=Cloud.jars[jid];if(!j)return;const up={updatedAt:FV().serverTimestamp()};
+    fields.forEach(f=>up[f]=clean(j[f]));
+    Cloud.fs.collection('jars').doc(jid).update(up).catch(e=>toast('共用罐沒有存到雲端：'+(e.code||'')));
+  },600);
+}
+async function inviteTo(jid){
+  const inp=document.getElementById('inv-'+jid);const email=(inp&&inp.value||'').trim().toLowerCase();
+  const j=Cloud.jars[jid];if(!j)return;
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('請輸入正確的 Email');return}
+  if(email===myEmail()){toast('不能邀請自己');return}
+  if(Object.values(j.memberInfo||{}).some(m=>(m.email||'').toLowerCase()===email)){toast('對方已經是成員了');return}
+  try{
+    await Cloud.fs.collection('invites').doc(email+'_'+jid).set({jid,owner:myUid(),email,jarName:j.name,fromName:myName(),createdAt:FV().serverTimestamp()});
+    toast('邀請已送出，對方登入後就會看到');
+  }catch(e){toast('邀請失敗：'+(e.code||''))}
+}
+async function acceptInvite(iid){
+  const inv=Cloud.invites.find(x=>x.id===iid);if(!inv)return;
+  try{
+    const b=Cloud.fs.batch();
+    b.update(Cloud.fs.collection('jars').doc(inv.jid),{members:FV().arrayUnion(myUid()),['memberInfo.'+myUid()]:{name:myName(),email:myEmail()},updatedAt:FV().serverTimestamp()});
+    b.delete(Cloud.fs.collection('invites').doc(iid));
+    await b.commit();
+    toast(`已加入「${inv.jarName}」，到設定頁可以設定每月投入多少`);
+  }catch(e){toast('加入失敗：'+(e.code||''))}
+}
+async function declineInvite(iid){try{await Cloud.fs.collection('invites').doc(iid).delete();toast('已婉拒')}catch(e){toast('操作失敗')}}
+async function cancelInvite(iid){try{await Cloud.fs.collection('invites').doc(iid).delete();toast('已取消邀請')}catch(e){toast('操作失敗')}}
+async function leaveJar(jid){
+  const j=Cloud.jars[jid];if(!j)return;
+  if(!confirm(`確定退出「${j.name}」？\n\n退出後這個罐子會從你的畫面消失，你之前投入的錢和記的紀錄會留在罐子裡。`))return;
+  try{
+    await Cloud.fs.collection('jars').doc(jid).update({members:FV().arrayRemove(myUid()),['memberInfo.'+myUid()]:FV().delete(),updatedAt:FV().serverTimestamp()});
+    if(S.jarPlan[jid])S.jarPlan[jid].until=shiftMonth(curMonth(),1);
+    persist();toast('已退出共用');
+  }catch(e){toast('退出失敗：'+(e.code||''))}
+}
+async function removeMember(jid,u){
+  const j=Cloud.jars[jid];if(!j)return;
+  if(!confirm(`確定把「${memberName(j,u)}」移出「${j.name}」？對方記的紀錄會保留。`))return;
+  try{await Cloud.fs.collection('jars').doc(jid).update({members:FV().arrayRemove(u),['memberInfo.'+u]:FV().delete(),updatedAt:FV().serverTimestamp()});toast('已移除成員')}
+  catch(e){toast('移除失敗：'+(e.code||''))}
+}
+async function deleteJar(jid){
+  const j=Cloud.jars[jid];if(!j)return;
+  if(!confirm(`確定刪除「${j.name}」？\n\n罐子和裡面所有人的紀錄都會刪除，無法復原。罐子裡如果還有錢，建議先轉回各自的罐子。`))return;
+  try{
+    const ref=Cloud.fs.collection('jars').doc(jid);
+    const qs=await ref.collection('txns').get();
+    for(let i=0;i<qs.docs.length;i+=400){const b=Cloud.fs.batch();qs.docs.slice(i,i+400).forEach(d=>b.delete(d.ref));await b.commit()}
+    for(const inv of Cloud.sent.filter(x=>x.jid===jid))await Cloud.fs.collection('invites').doc(inv.id).delete();
+    await ref.delete();
+    if(S.jarPlan[jid])S.jarPlan[jid].until=shiftMonth(curMonth(),1);
+    persist();toast('已刪除共用罐');
+  }catch(e){toast('刪除失敗：'+(e.code||''))}
+}
+async function sendVerify(){try{await Cloud.user.sendEmailVerification();toast('驗證信已寄出，請到信箱點連結')}catch(e){toast('寄送失敗：'+(e.code||''))}}
+async function checkVerified(){
+  try{await Cloud.user.reload();Cloud.user=Cloud.auth.currentUser;await Cloud.user.getIdToken(true)}catch(e){}
+  if(Cloud.user.emailVerified){toast('Email 已驗證');watchInvites()}else toast('還沒有驗證成功，請到信箱點驗證連結');
+  renderIfSettings();
+}
+
+function invitesHtml(){
+  return Cloud.invites.map(inv=>`<div class="acct invite"><div><b>${esc(inv.fromName||'有人')}</b> 邀請你共用「<b>${esc(inv.jarName||'共用罐')}</b>」罐子</div>
+    <div class="btns"><button class="gbtn" data-action="accept" data-id="${esc(inv.id)}">接受</button><button class="ghost" data-action="decline" data-id="${esc(inv.id)}">婉拒</button></div></div>`).join('');
+}
+function verifyHtml(){
+  const u=Cloud.user;if(!u||u.emailVerified)return '';
+  return `<div class="acct"><div class="note">你的 Email 還沒驗證。為了安全，要先驗證 Email，才能接受別人的共用邀請。</div>
+    <div class="btns"><button class="ghost" data-action="verify">寄送驗證信</button><button class="ghost" data-action="verified">我已完成驗證</button></div></div>`;
+}
+function sharedHtml(){
+  if(!cloudOn())return `<p class="note">登入帳號後，就可以建立共用罐子，和其他人一起投錢、記帳。</p>`;
+  const am=S.allocMode==='amount',me=myUid();
+  const cards=jarsList().map(j=>{
+    const owner=j.owner===me,jp=(S.jarPlan||{})[j.id]||{};
+    const members=(j.members||[]).map(u=>`<div class="mem"><span>${esc(memberName(j,u))}${u===j.owner?'（擁有者）':''}${u===me?'・你':''}</span>${owner&&u!==me?`<button class="icon-btn" data-action="rmmember" data-jid="${j.id}" data-id="${u}" aria-label="移除成員">✕</button>`:''}</div>`).join('');
+    const pend=owner?Cloud.sent.filter(x=>x.jid===j.id).map(x=>`<div class="mem"><span class="note">${esc(x.email)}・等待接受</span><button class="icon-btn" data-action="uninvite" data-id="${esc(x.id)}" aria-label="取消邀請">✕</button></div>`).join(''):'';
+    const cats=(j.categories||[]).map(c=>`<div class="set-item cat-item jc">
+      <input type="text" value="${esc(c.emoji)}" data-edit="jcemoji" data-jid="${j.id}" data-id="${c.id}" aria-label="圖示" style="text-align:center">
+      <input type="text" value="${esc(c.name)}" data-edit="jcname" data-jid="${j.id}" data-id="${c.id}" aria-label="分類名稱">
+      <button class="icon-btn" data-action="jdelc" data-jid="${j.id}" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
+    return `<div class="acct jarcard">
+      <div class="jhead"><button class="swatch" style="background:${j.color}" ${owner?`data-action="jcolor" data-jid="${j.id}"`:'disabled'} aria-label="換顏色"></button>
+        <input type="text" value="${esc(j.name)}" data-edit="jname" data-jid="${j.id}" ${owner?'':'disabled'} aria-label="共用罐名稱"><span class="pill">共用</span></div>
+      <label class="f">我每月投入${am?'金額':'比例（%）'}
+        <input type="number" inputmode="numeric" min="0" ${am?'step="100"':'max="100"'} value="${am?(+jp.amt||0):(+jp.pct||0)}" data-edit="jplan" data-jid="${j.id}"></label>
+      <div class="note" style="margin-top:-4px">這部分會從你的收入分配出來，放進共用罐。只有你看得到自己設定多少。</div>
+      <div class="sub">成員</div>${members}${pend}
+      ${owner?`<div class="invrow"><input type="email" id="inv-${j.id}" placeholder="對方登入用的 Email" inputmode="email"><button class="gbtn" data-action="invite" data-jid="${j.id}">邀請</button></div>`:''}
+      <div class="sub">共用分類</div>${cats}
+      <button class="ghost" data-action="jaddc" data-jid="${j.id}">新增共用分類</button>
+      ${owner?`<button class="ghost danger" data-action="deljar" data-jid="${j.id}">刪除共用罐</button>`:`<button class="ghost danger" data-action="leavejar" data-jid="${j.id}">退出共用</button>`}
+    </div>`}).join('');
+  return `${verifyHtml()}${invitesHtml()}<div style="display:grid;gap:12px">${cards}</div>
+    <button class="ghost" style="margin-top:12px" data-action="newjar">新增共用罐子</button>`;
 }
 
 /* ---------- auth actions ---------- */
@@ -375,8 +589,8 @@ function setAllocMode(m){
   let filled=false;
   if(m==='amount'&&planSum()===0){ // first switch: suggest amounts from the latest month's income
     const pt=planTotals(),mk=Object.keys(pt).sort().pop(),T=mk?pt[mk]:0;
-    const tot=S.buckets.reduce((a,b)=>a+(+b.pct||0),0)||1;
-    if(T>0){S.buckets.forEach(b=>b.amt=Math.round(T*(+b.pct||0)/tot/100)*100);filled=true}
+    const tot=targets().reduce((a,b)=>a+b.pct,0)||1;
+    if(T>0){S.buckets.forEach(b=>b.amt=Math.round(T*(+b.pct||0)/tot/100)*100);for(const jid in (S.jarPlan||{}))S.jarPlan[jid].amt=Math.round(T*(+S.jarPlan[jid].pct||0)/tot/100)*100;filled=true}
     if(!bucketById(S.remainderId))S.remainderId=(S.buckets.find(b=>/彈性/.test(b.name))||S.buckets[S.buckets.length-1]).id;
   }
   S.allocMode=m;persist();render();
@@ -408,8 +622,8 @@ function exportCSV(){
   const rows=[['日期','類型','金額','分類','罐子','備註']];
   for(const t of [...S.txns].sort((a,b)=>a.date<b.date?-1:1)){
     if(t.type==='expense'){const c=catById(t.catId),b=bucketById(t.bucketId);rows.push([t.date,'支出',t.amount,c?c.name:'',b?b.name:'',t.note])}
-    else if(t.type==='income'){rows.push([t.date,'收入',t.amount,'',Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>(bucketById(k)?.name||'')+' '+v).join('；'),t.note])}
-    else rows.push([t.date,'轉移',t.amount,'',(bucketById(t.from)?.name||'')+'→'+(bucketById(t.to)?.name||''),t.note]);
+    else if(t.type==='income'){rows.push([t.date,'收入',t.amount,'',Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>nameOf(k)+' '+v).join('；'),t.note])}
+    else rows.push([t.date,'轉移',t.amount,'',nameOf(t.from)+'→'+nameOf(t.to),t.note]);
   }
   const csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='分罐記帳-'+today()+'.csv';
@@ -425,12 +639,22 @@ function importData(file){
 /* ---------- calculations ---------- */
 const bucketById=id=>S.buckets.find(b=>b.id===id);
 const catById=id=>S.categories.find(c=>c.id===id);
-function allocate(amount,mode,target){
+const SJ='sj:';
+const isSJ=id=>typeof id==='string'&&id.startsWith(SJ);
+const sjId=id=>id.slice(SJ.length);
+const jarActive=(jp,mk)=>!!jp&&(!jp.from||mk>=jp.from)&&(!jp.until||mk<jp.until);
+function jarTargets(mk){ // shared jars I contribute to in month mk
+  mk=mk||curMonth();const r=[],jp=S.jarPlan||{};
+  for(const jid in jp)if(jarActive(jp[jid],mk))r.push({id:SJ+jid,pct:+jp[jid].pct||0,amt:+jp[jid].amt||0});
+  return r;
+}
+function targets(mk){return S.buckets.map(b=>({id:b.id,pct:+b.pct||0,amt:+b.amt||0})).concat(jarTargets(mk))}
+function allocate(amount,mode,target,mk){
   const res={};
   if(mode==='one'){res[target]=amount;return res}
-  const tot=S.buckets.reduce((a,b)=>a+(+b.pct||0),0)||1;
+  const ts=targets(mk),tot=ts.reduce((a,b)=>a+b.pct,0)||1;
   let rem=amount;
-  S.buckets.forEach((b,i)=>{const v=i===S.buckets.length-1?rem:Math.round(amount*(+b.pct||0)/tot);res[b.id]=v;rem-=v});
+  ts.forEach((b,i)=>{const v=i===ts.length-1?rem:Math.round(amount*b.pct/tot);res[b.id]=v;rem-=v});
   return res;
 }
 const isPlan=t=>t.type==='income'&&t.mode!=='one';
@@ -442,22 +666,22 @@ function planTotals(excludeId){ // month -> total of plan-following income
   if(!excludeId)planCache=m;
   return m;
 }
-const planSum=()=>S.buckets.reduce((a,b)=>a+Math.max(0,+b.amt||0),0);
+const planSum=mk=>targets(mk).reduce((a,b)=>a+Math.max(0,b.amt),0);
 function remainderBucket(){return bucketById(S.remainderId)||S.buckets[S.buckets.length-1]}
-function planAlloc(T){ // how one month's plan income is split
-  const res={};S.buckets.forEach(b=>res[b.id]=0);
+function planAlloc(T,mk){ // how one month's plan income is split
+  const ts=targets(mk),res={};ts.forEach(b=>res[b.id]=0);
   if(T<=0||!S.buckets.length)return res;
-  if(S.allocMode!=='amount')return Object.assign(res,allocate(T,'pct'));
-  const rid=remainderBucket().id,P=planSum();
+  if(S.allocMode!=='amount')return Object.assign(res,allocate(T,'pct',null,mk));
+  const rid=remainderBucket().id,P=planSum(mk);
   if(P<=0){res[rid]=T;return res}
-  if(T>=P){S.buckets.forEach(b=>res[b.id]=Math.max(0,+b.amt||0));res[rid]+=T-P;return res}
-  const bs=S.buckets.filter(b=>(+b.amt||0)>0);let rem=T;
+  if(T>=P){ts.forEach(b=>res[b.id]=Math.max(0,b.amt));res[rid]+=T-P;return res}
+  const bs=ts.filter(b=>b.amt>0);let rem=T;
   bs.forEach((b,i)=>{const v=i===bs.length-1?rem:Math.round(T*b.amt/P);res[b.id]=v;rem-=v});
   return res;
 }
 function incAlloc(t){ // this income's share of its month
   if(t.mode==='one')return {[t.target]:t.amount};
-  const T=planTotals()[t.date.slice(0,7)]||t.amount,a=planAlloc(T),r={};
+  const mk=t.date.slice(0,7),T=planTotals()[mk]||t.amount,a=planAlloc(T,mk),r={};
   for(const k in a)r[k]=Math.round(a[k]*t.amount/T);
   return r;
 }
@@ -478,7 +702,7 @@ function stats(excludeId,month){
     else if(t.type==='transfer'){add(t.from,mk,'o',t.amount);add(t.to,mk,'i',t.amount)}
   }
   const pt=planTotals(excludeId);
-  for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk]);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
+  for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk],mk);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
   // walk month by month: carrying jars keep their balance; reset jars settle at month end into the designated jar
   const rem=remainderBucket();
   const months=new Set([month]);for(const id in per)for(const mk in per[id])months.add(mk);
@@ -501,6 +725,19 @@ function stats(excludeId,month){
   return out;
 }
 
+const jarIn=t=>t.kind==='contrib'||t.kind==='in';
+function jarStats(jid,month,excludeId){ // shared jars always carry over
+  month=month||curMonth();let open=0,mi=0,mo=0;
+  for(const t of (Cloud.jarTxns[jid]||[])){
+    if(t.id===excludeId)continue;
+    const mk=t.date.slice(0,7);if(mk>month)continue;
+    const v=jarIn(t)?t.amount:-t.amount;
+    if(mk<month)open+=v;else if(jarIn(t))mi+=t.amount;else mo+=t.amount;
+  }
+  return {open,monthIn:mi,monthOut:mo,bal:open+mi-mo};
+}
+function balanceOf(id,month,excludeId){return isSJ(id)?jarStats(sjId(id),month,excludeId).bal:(stats(excludeId,month)[id]||{bal:0}).bal}
+
 /* ---------- views ---------- */
 function render(){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===tab?'page':'false'));
@@ -515,61 +752,105 @@ function monthNav(){
     <div class="mlabel">${y} 年 ${m} 月<input type="month" id="hm" value="${listMonth}" aria-label="選擇月份"></div>
     <button class="arr" data-action="mshift" data-d="1" aria-label="下個月" ${listMonth>=latest?'disabled':''}>›</button></div>`;
 }
+function jarCol(id,name,color,s,sub,shared){
+  const avail=Math.max(0,s.open)+s.monthIn,ratio=avail>0?Math.max(0,Math.min(1,s.bal/avail)):0;
+  return `<button class="jarcol" data-action="jump" data-bucket="${id}" aria-label="${esc(name)}，月底餘額 ${money(s.bal)}">
+    <div class="jar ${s.bal<0?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${color}"></div>
+    <div class="jarpct num">${avail>0?Math.round(ratio*100)+'%':'空'}</div></div>
+    <div class="jarname">${esc(name)}${shared?'<span class="pill">共用</span>':''}</div>
+    <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
+    <div class="jarsub">${sub}</div></button>`;
+}
+function monthRow(name,color,s,shared){
+  const avail=Math.max(0,s.open)+s.monthIn,base=Math.max(avail,s.monthOut,1);
+  return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">花了 ${money(s.monthOut)} ／ 可用 ${money(avail)}</span></div>
+  <div class="bar"><i style="width:${Math.min(100,s.monthOut/base*100)}%;background:${s.monthOut>avail?'var(--neg)':color}"></i></div></div>`;
+}
+// records for a month: my own + shared-jar records (my own mirrors are already shown as my transfers/income)
+function monthItems(month,filter){
+  const me=myUid();filter=filter||'all';
+  let own=[],sh=[];
+  if(!isSJ(filter)){
+    const rel=t=>filter==='all'||(t.type==='expense'&&t.bucketId===filter)||(t.type==='income'&&incAlloc(t)[filter])||(t.type==='transfer'&&(t.from===filter||t.to===filter));
+    own=S.txns.filter(t=>t.date.slice(0,7)===month&&rel(t));
+  }
+  for(const j of jarsList()){
+    if(isSJ(filter)&&sjId(filter)!==j.id)continue;
+    if(!isSJ(filter)&&filter!=='all')continue;
+    for(const t of (Cloud.jarTxns[j.id]||[])){
+      if(t.date.slice(0,7)!==month)continue;
+      if(filter==='all'&&t.by===me&&isMirror(t))continue;
+      sh.push(t);
+    }
+  }
+  return own.concat(sh).sort(sortTx);
+}
 function homeView(){
   const st=stats(null,listMonth);
   const jars=S.buckets.map(b=>{
-    const s=st[b.id];const avail=Math.max(0,s.open)+s.monthIn;
-    const ratio=avail>0?Math.max(0,Math.min(1,s.bal/avail)):0;
+    const s=st[b.id];
     const sub=!carries(b)?'每月歸零':s.sweep?`上月結轉 ${money(s.open)}<br>含歸零罐結算 ${s.sweep<0?'−':'+'}${money(Math.abs(s.sweep))}`:(s.open?`上月結轉 ${money(s.open)}`:'會結轉');
-    return `<button class="jarcol" data-action="jump" data-bucket="${b.id}" aria-label="${esc(b.name)}，月底餘額 ${money(s.bal)}">
-      <div class="jar ${s.bal<0?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${b.color}"></div>
-      <div class="jarpct num">${avail>0?Math.round(ratio*100)+'%':'空'}</div></div>
-      <div class="jarname">${esc(b.name)}</div>
-      <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
-      <div class="jarsub">${sub}</div></button>`}).join('');
+    return jarCol(b.id,b.name,b.color,s,sub,false)}).join('');
+  const shared=jarsList();
+  const sjars=shared.map(j=>{const s=jarStats(j.id,listMonth);return jarCol(SJ+j.id,j.name,j.color,s,`${(j.members||[]).length} 人共用`+(s.open?`<br>上月結轉 ${money(s.open)}`:''),true)}).join('');
   const total=S.buckets.reduce((a,b)=>a+st[b.id].bal,0);
-  const monthRows=S.buckets.map(b=>{const s=st[b.id];const avail=Math.max(0,s.open)+s.monthIn;const base=Math.max(avail,s.monthOut,1);
-    return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</span><span class="num">花了 ${money(s.monthOut)} ／ 可用 ${money(avail)}</span></div>
-    <div class="bar"><i style="width:${Math.min(100,s.monthOut/base*100)}%;background:${s.monthOut>avail?'var(--neg)':b.color}"></i></div></div>`}).join('');
-  const items=S.txns.filter(t=>t.date.slice(0,7)===listMonth).sort(sortTx);
+  const monthRows=S.buckets.map(b=>monthRow(b.name,b.color,st[b.id],false)).join('')+shared.map(j=>monthRow(j.name,j.color,jarStats(j.id,listMonth),true)).join('');
+  const items=monthItems(listMonth,'all');
   const isNow=listMonth===curMonth();
-  const empty=S.txns.length===0?`<div class="empty">先記一筆收入，錢會依計畫分進各個罐子。</div>`:'';
-  return `${monthNav()}<div class="shelf">${jars}</div>
-  <div class="total"><span>${isNow?'目前':'月底'}所有罐子合計</span><b class="num ${total<0?'neg':''}">${money(total)}</b></div>
+  const any=S.txns.length||shared.length;
+  const empty=!any?`<div class="empty">先記一筆收入，錢會依計畫分進各個罐子。</div>`:'';
+  return `${cloudOn()?invitesHtml():''}${monthNav()}<div class="shelf">${jars}${sjars}</div>
+  <div class="total"><span>${isNow?'目前':'月底'}${shared.length?'我的罐子':'所有罐子'}合計</span><b class="num ${total<0?'neg':''}">${money(total)}</b></div>
   ${empty}
-  ${S.txns.length?`<h2>這個月各罐</h2><div class="month-row">${monthRows}</div>
-  <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(txRow).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
+  ${any?`<h2>這個月各罐</h2><div class="month-row">${monthRows}</div>
+  <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(rowOf).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
+}
+const rowOf=t=>t.jid?sharedRow(t):txRow(t);
+function sharedRow(t){
+  const j=Cloud.jars[t.jid]||{};const me=myUid();
+  let ic='🧾',t1='',sign='−',cls='';
+  if(t.kind==='expense'){ic=t.emoji||'🧾';t1=t.catName||'支出'}
+  else if(t.kind==='contrib'){ic='🫙';t1='每月計畫投入';sign='+';cls='in'}
+  else if(t.kind==='in'){ic='💵';t1=t.note||'投入';sign='+';cls='in'}
+  else{ic='🔁';t1='從共用罐轉出'}
+  const who=t.by===me?'你':(t.byName||'成員');
+  const extra=(t.kind==='in'&&t.src?'從'+esc(t.src)+'・':'')+(t.kind==='withdraw'&&t.src?'到'+esc(t.src)+'・':'')+(t.note&&t.kind!=='in'?esc(t.note)+'・':'');
+  return `<li><button class="tx" data-action="stx" data-jid="${t.jid}" data-id="${esc(t.id)}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div>
+    <div class="t2"><span class="dot" style="background:${j.color||'#999'}"></span>${esc(j.name||'共用罐')}（共用）・${extra}${esc(who)}</div></span><span class="amt num ${cls}">${sign}${money(t.amount)}</span></button></li>`;
 }
 function sortTx(a,b){return a.date<b.date?1:a.date>b.date?-1:(b.ts||0)-(a.ts||0)}
 function txRow(t){
   let ic='💵',t1='',t2='',amt='',cls='';
   if(t.type==='expense'){const c=catById(t.catId);const b=bucketById(t.bucketId);ic=c?c.emoji:'🧾';t1=c?c.name:'已刪除分類';t2=`<span class="dot" style="background:${b?b.color:'#999'}"></span>${esc(b?b.name:'—')}${t.note?'｜'+esc(t.note):''}`;amt='−'+money(t.amount)}
-  else if(t.type==='income'){t1=t.note||'收入';t2=(t.mode==='one'?'全部放入・':(S.allocMode==='amount'?'依計畫・':'依比例・'))+Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>{const b=bucketById(k);return b?`${esc(b.name)} ${money(v)}`:''}).filter(Boolean).join('、');amt='+'+money(t.amount);cls='in'}
-  else{const f=bucketById(t.from),to=bucketById(t.to);ic='🔁';t1=`${f?f.name:'—'} → ${to?to.name:'—'}`;t2=t.note?esc(t.note):'罐子間轉移';amt=money(t.amount)}
+  else if(t.type==='income'){t1=t.note||'收入';t2=(t.mode==='one'?'全部放入・':(S.allocMode==='amount'?'依計畫・':'依比例・'))+Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>`${esc(nameOf(k))} ${money(v)}`).join('、');amt='+'+money(t.amount);cls='in'}
+  else{ic='🔁';t1=`${nameOf(t.from)} → ${nameOf(t.to)}`;t2=t.note?esc(t.note):'罐子間轉移';amt=money(t.amount)}
   return `<li><button class="tx" data-action="tx" data-id="${t.id}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div><div class="t2">${t2}</div></span><span class="amt num ${cls}">${amt}</span></button></li>`;
 }
 function listView(){
   const chips=[`<button class="chip" data-action="lb" data-b="all" aria-pressed="${listBucket==='all'}">全部</button>`]
-    .concat(S.buckets.map(b=>`<button class="chip" data-action="lb" data-b="${b.id}" aria-pressed="${listBucket===b.id}"><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</button>`)).join('');
-  const rel=t=>listBucket==='all'||(t.type==='expense'&&t.bucketId===listBucket)||(t.type==='income'&&incAlloc(t)[listBucket])||(t.type==='transfer'&&(t.from===listBucket||t.to===listBucket));
-  const items=S.txns.filter(t=>t.date.slice(0,7)===listMonth&&rel(t)).sort(sortTx);
-  let html='',last='';
-  let sumOut=0,sumIn=0;
+    .concat(S.buckets.map(b=>`<button class="chip" data-action="lb" data-b="${b.id}" aria-pressed="${listBucket===b.id}"><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</button>`))
+    .concat(jarsList().map(j=>`<button class="chip" data-action="lb" data-b="${SJ+j.id}" aria-pressed="${listBucket===SJ+j.id}"><span class="dot" style="background:${j.color}"></span>${esc(j.name)}<span class="pill">共用</span></button>`)).join('');
+  if(isSJ(listBucket)&&!Cloud.jars[sjId(listBucket)])listBucket='all';
+  const items=monthItems(listMonth,listBucket);
+  let html='',last='',sumOut=0,sumIn=0;
   for(const t of items){
-    if(t.type==='expense')sumOut+=t.amount;
-    if(t.type==='income')sumIn+=listBucket==='all'?t.amount:(incAlloc(t)[listBucket]||0);
+    if(t.jid){if(jarIn(t))sumIn+=t.amount;else sumOut+=t.amount}
+    else{
+      if(t.type==='expense')sumOut+=t.amount;
+      if(t.type==='income')sumIn+=listBucket==='all'?t.amount:(incAlloc(t)[listBucket]||0);
+    }
     if(t.date!==last){if(last)html+='</ul>';const d=new Date(t.date+'T00:00');html+=`<div class="day">${d.getMonth()+1}月${d.getDate()}日 週${'日一二三四五六'[d.getDay()]}</div><ul class="txs">`;last=t.date}
-    html+=txRow(t);
+    html+=rowOf(t);
   }
   if(last)html+='</ul>';
   return `<div style="display:grid;grid-template-columns:1fr;gap:12px">
     <input type="month" id="lm" value="${listMonth}" aria-label="選擇月份">
     <div class="filters">${chips}</div></div>
-    <div class="total"><span>這個月</span><span class="num">支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b></span></div>
+    <div class="total"><span>這個月</span><span class="num">支出 <b>${money(sumOut)}</b>　${isSJ(listBucket)?'投入':'收入'} <b>${money(sumIn)}</b></span></div>
     ${html||'<div class="empty">這個月還沒有紀錄。</div>'}`;
 }
 function settingsView(){
-  const sum=S.buckets.reduce((a,b)=>a+(+b.pct||0),0);
+  const sum=targets().reduce((a,b)=>a+b.pct,0);
   const am=S.allocMode==='amount';
   const bl=S.buckets.map(b=>`<div class="set-item ${am?'amt-mode':''}">
     <button class="swatch" style="background:${b.color}" data-action="color" data-id="${b.id}" aria-label="換顏色"></button>
@@ -579,10 +860,11 @@ function settingsView(){
     <button class="icon-btn" data-action="delb" data-id="${b.id}" aria-label="刪除罐子">✕</button>
     <label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${carries(b)?'checked':''} ${isRemainder(b)?'disabled':''}>${isRemainder(b)?'指定罐子，一定會結轉':'沒用完的錢結轉到下個月'}</label></div>`).join('');
   const opts=id=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
+  const copts=id=>opts(id)+jarsList().map(j=>`<option value="${SJ+j.id}" ${SJ+j.id===id?'selected':''}>${esc(j.name)}（共用）</option>`).join('');
   const cl=S.categories.map(c=>`<div class="set-item cat-item">
     <input type="text" value="${esc(c.emoji)}" data-edit="cemoji" data-id="${c.id}" aria-label="圖示" style="text-align:center">
     <input type="text" value="${esc(c.name)}" data-edit="cname" data-id="${c.id}" aria-label="分類名稱">
-    <select data-edit="cbucket" data-id="${c.id}" aria-label="扣款罐子">${opts(c.bucketId)}</select>
+    <select data-edit="cbucket" data-id="${c.id}" aria-label="扣款罐子">${copts(c.bucketId)}</select>
     <button class="icon-btn" data-action="delc" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
   return `<h2 style="margin-top:0">帳號與同步</h2>${accountHtml()}
   <h2>罐子與分配方式</h2>
@@ -593,7 +875,10 @@ function settingsView(){
   :`<div class="pctsum ${sum===100?'':'bad'}">合計 ${sum}%${sum===100?'':'，建議調整到 100%（目前會依比例換算）'}</div>`}
   <div class="plan-extra"><label class="f">指定罐子：${am?'收入超過計畫的錢，以及':''}歸零罐子月底的剩餘或超支，都由這個罐子承接<select data-edit="remainder">${opts(remainderBucket()?.id)}</select></label>
   ${am?'<p class="note" style="margin:0">收入不足計畫時，會依各罐計畫金額等比例分配。</p>':''}</div>
+  ${jarTargets().length?`<p class="note">${am?'計畫合計':'合計'}已包含你對共用罐的投入。</p>`:''}
   <button class="ghost" style="margin-top:12px" data-action="addb">新增罐子</button>
+  <h2>共用罐子</h2>
+  ${sharedHtml()}
   <h2>支出分類 → 扣款罐子</h2>
   <p class="note">選了分類，就會自動從對應的罐子扣錢。</p>
   ${cl}
@@ -617,71 +902,116 @@ function openAdd(type){
   openSheet(addHtml());focusAmount();
 }
 function focusAmount(){setTimeout(()=>{const a=document.getElementById('amt');if(a)a.focus()},300)}
+// a category key is a personal category id, or 'jc:<jarId>:<catId>' for a shared jar's own category
+function resolveCat(key){
+  if(!key)return null;
+  if(key.startsWith('jc:')){const [,jid,cid]=key.split(':');const j=Cloud.jars[jid];const c=j&&(j.categories||[]).find(x=>x.id===cid);
+    return c?{key,emoji:c.emoji,name:c.name,shared:true,jid}:null}
+  const c=catById(key);if(!c)return null;
+  if(isSJ(c.bucketId))return Cloud.jars[sjId(c.bucketId)]?{key,emoji:c.emoji,name:c.name,shared:true,jid:sjId(c.bucketId)}:null;
+  return {key,emoji:c.emoji,name:c.name,shared:false,bucketId:c.bucketId};
+}
 function addHtml(){
-  const d=draft;const seg=[['expense','支出'],['income','收入'],['transfer','轉移']].map(([k,l])=>`<button data-action="type" data-t="${k}" aria-pressed="${d.type===k}">${l}</button>`).join('');
-  const opts=sel=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===sel?'selected':''}>${esc(b.name)}</option>`).join('');
+  const d=draft;const editing=d.editId||d.editShared;
+  const seg=[['expense','支出'],['income','收入'],['transfer','轉移']].map(([k,l])=>`<button data-action="type" data-t="${k}" aria-pressed="${d.type===k}">${l}</button>`).join('');
+  const jarOpts=sel=>jarsList().map(j=>`<option value="${SJ+j.id}" ${SJ+j.id===sel?'selected':''}>${esc(j.name)}（共用）</option>`).join('');
+  const opts=sel=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===sel?'selected':''}>${esc(b.name)}</option>`).join('')+jarOpts(sel);
+  const catBtn=(key,emoji,name,color)=>`<button class="cat" data-action="cat" data-id="${esc(key)}" aria-pressed="${d.catId===key}"><span class="e">${esc(emoji)}</span>${esc(name)}<span class="dot" style="background:${color};margin:2px 0 0"></span></button>`;
   let body='';
   if(d.type==='expense'){
-    body=`<div class="cats">${S.categories.map(c=>{const b=bucketById(c.bucketId);return `<button class="cat" data-action="cat" data-id="${c.id}" aria-pressed="${d.catId===c.id}"><span class="e">${esc(c.emoji)}</span>${esc(c.name)}<span class="dot" style="background:${b?b.color:'#999'};margin:2px 0 0"></span></button>`}).join('')}</div>`;
+    const mine=S.categories.filter(c=>!isSJ(c.bucketId)||Cloud.jars[sjId(c.bucketId)]).map(c=>catBtn(c.id,c.emoji,c.name,colorOf(c.bucketId))).join('');
+    const sh=jarsList().filter(j=>(j.categories||[]).length).map(j=>`<div class="catgroup">${esc(j.name)}（共用）</div><div class="cats">${j.categories.map(c=>catBtn('jc:'+j.id+':'+c.id,c.emoji,c.name,j.color)).join('')}</div>`).join('');
+    body=`<div class="cats">${mine}</div>${sh}`;
   }else if(d.type==='income'){
     body=`<div class="row2"><label class="f">分配方式<select id="mode"><option value="pct" ${d.mode==='pct'?'selected':''}>${S.allocMode==='amount'?'依每月計畫分配':'依比例分配'}</option><option value="one" ${d.mode==='one'?'selected':''}>全部放入一罐</option></select></label>
     <label class="f ${d.mode==='one'?'':'hidden'}" id="tgtWrap">放入<select id="tgt">${opts(d.target)}</select></label></div>`;
   }else{
     body=`<div class="row2"><label class="f">從<select id="from">${opts(d.from)}</select></label><label class="f">到<select id="to">${opts(d.to)}</select></label></div>`;
   }
-  return `${d.editId?'<h2 style="margin:0 0 12px">編輯紀錄</h2>':''}<div class="seg">${seg}</div>
+  return `${editing?'<h2 style="margin:0 0 12px">編輯紀錄</h2>':''}${d.editShared?'':`<div class="seg">${seg}</div>`}
   <div class="amount"><span>$</span><input id="amt" class="num" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${esc(d.amount)}" aria-label="金額"></div>
   ${body}
   <p class="hint" id="hint"></p>
   <div class="row2"><label class="f">日期<input type="date" id="date" value="${d.date}"></label><label class="f">${d.type==='income'?'來源':'備註'}<input type="text" id="note" value="${esc(d.note)}" placeholder="${d.type==='income'?'例如：薪水':'選填'}"></label></div>
-  <button class="primary" id="saveBtn" data-action="save">${d.editId?'儲存變更':'記下這筆'}</button>${d.editId?`<button class="ghost danger" style="width:100%;margin-top:10px" data-action="deltx" data-id="${d.editId}">刪除這筆</button>`:''}`;
+  <button class="primary" id="saveBtn" data-action="save">${editing?'儲存變更':'記下這筆'}</button>${d.editId?`<button class="ghost danger" style="width:100%;margin-top:10px" data-action="deltx" data-id="${d.editId}">刪除這筆</button>`:''}${d.editShared?`<button class="ghost danger" style="width:100%;margin-top:10px" data-action="delstx" data-jid="${d.editShared.jid}" data-id="${esc(d.editShared.id)}">刪除這筆</button>`:''}`;
 }
 function updateHint(){
   const d=draft;if(!d)return;const h=document.getElementById('hint');const btn=document.getElementById('saveBtn');
-  const amt=Math.round(+d.amount||0);const st=stats(d.editId,(d.date||today()).slice(0,7));let ok=amt>0,msg='';
+  const amt=Math.round(+d.amount||0),mk=(d.date||today()).slice(0,7);let ok=amt>0,msg='';
+  const exShared=d.editShared?d.editShared.id:undefined;
   if(d.type==='expense'){
-    const c=catById(d.catId);ok=ok&&!!c;
-    if(c){const b=bucketById(c.bucketId);const after=st[b.id].bal-amt;msg=`從「<b>${esc(b.name)}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
+    const c=resolveCat(d.catId);ok=ok&&!!c;
+    if(c){const id=c.shared?SJ+c.jid:c.bucketId;const after=(c.shared?jarStats(c.jid,mk,exShared).bal:balanceOf(id,mk,d.editId))-amt;
+      msg=`從「<b>${esc(nameOf(id))}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
     else msg='選一個分類';
   }else if(d.type==='income'){
     if(amt>0){
       let a;
       if(d.mode==='one')a=allocate(amt,'one',d.target);
       else{
-        const mk=(d.date||today()).slice(0,7),T0=planTotals(d.editId)[mk]||0,a0=planAlloc(T0),a1=planAlloc(T0+amt);
+        const T0=planTotals(d.editId)[mk]||0,a0=planAlloc(T0,mk),a1=planAlloc(T0+amt,mk);
         a={};for(const k in a1)a[k]=a1[k]-(a0[k]||0);
         if(S.allocMode==='amount'){
-          const P=planSum(),T=T0+amt;
+          const P=planSum(mk),T=T0+amt;
           const tail=P<=0?'還沒設定每月計畫金額，會全部放入「'+esc(remainderBucket().name)+'」':T>=P?(T>P?`本月收入 ${money(T)}，超過計畫 ${money(T-P)}，多的放入「${esc(remainderBucket().name)}」`:`本月收入剛好達到計畫 ${money(P)}`):`本月收入 ${money(T)}，還差 ${money(P-T)} 達到計畫，先依比例分配`;
           msg='<br>'+tail;
         }
       }
-      msg=Object.entries(a).filter(([,v])=>v).map(([k,v])=>`${esc(bucketById(k).name)} <b>${v<0?'−':'+'}${money(Math.abs(v))}</b>`).join('　')+msg;
+      msg=Object.entries(a).filter(([,v])=>v).map(([k,v])=>`${esc(nameOf(k))} <b>${v<0?'−':'+'}${money(Math.abs(v))}</b>`).join('　')+msg;
     }
     else msg='輸入金額後會顯示分配結果';
   }else{
-    ok=ok&&d.from!==d.to;
-    msg=d.from===d.to?'請選兩個不同的罐子':`「${esc(bucketById(d.from).name)}」目前有 ${money(st[d.from].bal)}`;
+    const both=isSJ(d.from)&&isSJ(d.to);
+    ok=ok&&d.from!==d.to&&!both;
+    msg=d.from===d.to?'請選兩個不同的罐子':both?'共用罐之間不能直接轉移，請經過自己的罐子':`「${esc(nameOf(d.from))}」目前有 ${money(balanceOf(d.from,mk,d.editId))}`;
   }
   h.innerHTML=msg;btn.disabled=!ok;
 }
+function jarTxnRef(jid,id){return Cloud.fs.collection('jars').doc(jid).collection('txns').doc(id)}
 function saveDraft(){
   const d=draft;const amt=Math.round(+d.amount||0);if(amt<=0)return;
-  const old=d.editId?S.txns.find(t=>t.id===d.editId):null;
-  const base={id:old?old.id:uid(),ts:old?old.ts:Date.now(),type:d.type,amount:amt,date:d.date||today(),note:(d.note||'').trim()};
-  if(d.type==='expense'){const c=catById(d.catId);if(!c)return;base.catId=c.id;base.bucketId=c.bucketId}
-  else if(d.type==='income'){base.mode=d.mode;if(d.mode==='one')base.target=d.target}
-  else{if(d.from===d.to)return;base.from=d.from;base.to=d.to}
-  putTxn(base);closeSheet();render();toast(old?'已儲存變更':'已記下');
+  const oldP=d.editId?S.txns.find(t=>t.id===d.editId):null,oldS=d.editShared||null;
+  const date=d.date||today(),note=(d.note||'').trim();
+  const c=d.type==='expense'?resolveCat(d.catId):null;
+  if(d.type==='expense'&&!c)return;
+  if(c&&c.shared){ // goes into the shared jar
+    if(!cloudOn()){toast('需要登入才能記到共用罐');return}
+    const id=(oldS&&oldS.jid===c.jid)?oldS.id:uid();
+    const doc={kind:'expense',amount:amt,date,note,by:myUid(),byName:myName(),emoji:c.emoji,catName:c.name,catKey:c.key,ts:(oldS&&oldS.ts)||Date.now()};
+    jarTxnRef(c.jid,id).set(doc).catch(e=>toast('共用罐儲存失敗：'+(e.code||'')));
+    if(oldS&&oldS.jid!==c.jid)jarTxnRef(oldS.jid,oldS.id).delete().catch(()=>{});
+    if(oldP)removeTxn(oldP.id);
+  }else{
+    const base={id:oldP?oldP.id:uid(),ts:oldP?oldP.ts:Date.now(),type:d.type,amount:amt,date,note};
+    if(d.type==='expense'){base.catId=c.key;base.bucketId=c.bucketId}
+    else if(d.type==='income'){base.mode=d.mode;if(d.mode==='one')base.target=d.target}
+    else{if(d.from===d.to||(isSJ(d.from)&&isSJ(d.to)))return;base.from=d.from;base.to=d.to}
+    if((isSJ(base.target)||isSJ(base.from)||isSJ(base.to))&&!cloudOn()){toast('需要登入才能使用共用罐');return}
+    putTxn(base);
+    if(oldS)jarTxnRef(oldS.jid,oldS.id).delete().catch(()=>{});
+  }
+  closeSheet();render();toast(oldP||oldS?'已儲存變更':'已記下');
 }
 function openTx(id){
   const t=S.txns.find(x=>x.id===id);if(!t)return;
   const b0=S.buckets[0]?.id,b1=S.buckets[1]?.id||b0;
   draft={editId:t.id,type:t.type,amount:String(t.amount),date:t.date,note:t.note||'',
-    catId:t.type==='expense'&&catById(t.catId)?t.catId:null,
+    catId:t.type==='expense'&&resolveCat(t.catId)?t.catId:null,
     mode:t.type==='income'?(t.mode||'pct'):'pct',target:(t.type==='income'&&t.target)||b0,
     from:t.from||b0,to:t.to||b1};
   openSheet(addHtml());
+}
+function openShared(jid,id){
+  const t=(Cloud.jarTxns[jid]||[]).find(x=>x.id===id);if(!t)return;
+  const me=myUid();
+  if(t.by===me&&id.startsWith('m_')&&S.txns.find(x=>x.id===id.slice(2))){openTx(id.slice(2));return}
+  if(t.by===me&&t.kind==='expense'){
+    draft={editShared:{jid,id,ts:t.ts},type:'expense',amount:String(t.amount),date:t.date,note:t.note||'',catId:resolveCat(t.catKey)?t.catKey:null,mode:'pct'};
+    openSheet(addHtml());return;
+  }
+  const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'?'這是你每月計畫投入的金額，由你的收入分配自動產生。要調整的話，到設定頁修改「我每月投入」。':'這筆由你的帳本自動產生。';
+  openSheet(`<ul class="txs">${sharedRow(t)}</ul><p class="note">${t.date}</p><p class="note">${why}</p>
+    <button class="ghost" style="width:100%;margin-top:10px" data-action="close">關閉</button>`);
 }
 
 let tt=null;function toast(m){const el=document.getElementById('toast');el.textContent=m;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),1600)}
@@ -699,6 +1029,21 @@ document.addEventListener('click',e=>{
     case 'cat':draft.catId=id;document.querySelectorAll('.cat').forEach(c=>c.setAttribute('aria-pressed',c.dataset.id===id));updateHint();break;
     case 'save':saveDraft();break;
     case 'tx':openTx(id);break;
+    case 'stx':openShared(el.dataset.jid,id);break;
+    case 'delstx':if(!confirm('確定刪除這筆紀錄？'))break;jarTxnRef(el.dataset.jid,id).delete().catch(()=>toast('刪除失敗'));closeSheet();render();toast('已刪除');break;
+    case 'newjar':createJar();break;
+    case 'invite':inviteTo(el.dataset.jid);break;
+    case 'uninvite':cancelInvite(id);break;
+    case 'accept':acceptInvite(id);break;
+    case 'decline':declineInvite(id);break;
+    case 'leavejar':leaveJar(el.dataset.jid);break;
+    case 'deljar':deleteJar(el.dataset.jid);break;
+    case 'rmmember':removeMember(el.dataset.jid,id);break;
+    case 'verify':sendVerify();break;
+    case 'verified':checkVerified();break;
+    case 'jcolor':{const j=Cloud.jars[el.dataset.jid];if(!j)break;j.color=PALETTE[(PALETTE.indexOf(j.color)+1)%PALETTE.length];saveJarMeta(el.dataset.jid,['color']);render();break}
+    case 'jaddc':{const j=Cloud.jars[el.dataset.jid];if(!j)break;j.categories=(j.categories||[]).concat([{id:uid(),emoji:'🏷️',name:'新分類'}]);saveJarMeta(el.dataset.jid,['categories']);render();break}
+    case 'jdelc':{const j=Cloud.jars[el.dataset.jid];if(!j)break;j.categories=(j.categories||[]).filter(c=>c.id!==id);saveJarMeta(el.dataset.jid,['categories']);render();break}
     case 'deltx':if(!confirm('確定刪除這筆紀錄？'))break;removeTxn(id);closeSheet();render();toast('已刪除');break;
     case 'mshift':listMonth=shiftMonth(listMonth,+el.dataset.d);render();break;
     case 'tolist':listBucket='all';tab='list';render();window.scrollTo(0,0);break;
@@ -729,8 +1074,17 @@ document.addEventListener('input',e=>{
     if(t.id==='note'){draft.note=t.value;return}
   }
   const ed=t.dataset.edit;if(!ed||ed==='bcarry')return;
+  if(ed==='jname'||ed==='jcemoji'||ed==='jcname'){
+    const j=Cloud.jars[t.dataset.jid];if(!j)return;
+    if(ed==='jname'){j.name=t.value;saveJarMeta(t.dataset.jid,['name'])}
+    else{const c=(j.categories||[]).find(x=>x.id===t.dataset.id);if(!c)return;c[ed==='jcemoji'?'emoji':'name']=t.value;saveJarMeta(t.dataset.jid,['categories'])}
+    return;
+  }
+  if(ed==='jplan'){const jp=(S.jarPlan||{})[t.dataset.jid];if(!jp)return;const v=Math.max(0,parseInt(t.value)||0);
+    if(S.allocMode==='amount'){jp.amt=v;const ps=document.querySelector('#plansum b');if(ps)ps.textContent=money(planSum())}else jp.pct=Math.min(100,v);
+    persist();return}
   if(ed==='bname')bucketById(t.dataset.id).name=t.value;
-  if(ed==='bpct'){bucketById(t.dataset.id).pct=Math.max(0,Math.min(100,parseInt(t.value)||0));const sum=S.buckets.reduce((a,b)=>a+(+b.pct||0),0);const ps=document.querySelector('.pctsum');if(ps){ps.textContent='合計 '+sum+'%'+(sum===100?'':'，建議調整到 100%（目前會依比例換算）');ps.classList.toggle('bad',sum!==100)}}
+  if(ed==='bpct'){bucketById(t.dataset.id).pct=Math.max(0,Math.min(100,parseInt(t.value)||0));const sum=targets().reduce((a,b)=>a+b.pct,0);const ps=document.querySelector('.pctsum');if(ps){ps.textContent='合計 '+sum+'%'+(sum===100?'':'，建議調整到 100%（目前會依比例換算）');ps.classList.toggle('bad',sum!==100)}}
   if(ed==='bamt'){bucketById(t.dataset.id).amt=Math.max(0,parseInt(t.value)||0);const ps=document.querySelector('#plansum b');if(ps)ps.textContent=money(planSum())}
   if(ed==='cemoji')catById(t.dataset.id).emoji=t.value;
   if(ed==='cname')catById(t.dataset.id).name=t.value;
@@ -750,7 +1104,7 @@ document.addEventListener('change',e=>{
   }
   if(t.dataset.edit==='cbucket'){catById(t.dataset.id).bucketId=t.value;persist();render()}
   if(t.dataset.edit==='remainder'){S.remainderId=t.value;const b=bucketById(t.value);if(b&&b.carry===false){b.carry=true;toast(`「${b.name}」是指定罐子，已改為結轉`)}persist();render();return}
-  if(t.dataset.edit==='bname'||t.dataset.edit==='bpct'||t.dataset.edit==='bamt')render();
+  if(['bname','bpct','bamt','jplan','jname'].includes(t.dataset.edit))render();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){const b=document.getElementById('saveBtn');if(b&&!b.disabled)saveDraft()}});
 const obs=new MutationObserver(()=>{if(draft&&document.getElementById('hint')&&!document.getElementById('hint').dataset.init){document.getElementById('hint').dataset.init=1;updateHint()}});
