@@ -151,6 +151,13 @@ label.f > *{margin-top:4px}
 .pctsum.bad{color:var(--neg);font-weight:600}
 .toast{position:fixed;left:50%;bottom:calc(140px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:12px;font-size:14px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
+.toast.act{pointer-events:auto;display:flex;align-items:center;gap:14px}
+.toast .undo{background:none;border:0;color:var(--bg);font-weight:700;text-decoration:underline;padding:2px 0}
+li.swipe{position:relative;overflow:hidden}
+li.swipe .tx{position:relative;z-index:1;background:var(--bg);transition:transform .22s ease;touch-action:pan-y;will-change:transform}
+.del-act{position:absolute;top:0;right:0;bottom:1px;width:84px;display:flex}
+.del-act button{flex:1;border:0;background:var(--neg);color:#fff;font-weight:700;font-size:15px}
+@media (prefers-reduced-motion:reduce){li.swipe .tx{transition:none}}
 .hidden{display:none!important}
 .note{font-size:13px;color:var(--muted)}
 .acct{background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:14px;display:grid;gap:10px}
@@ -806,7 +813,8 @@ function homeView(){
   <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(rowOf).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
 }
 const rowOf=t=>t.jid?sharedRow(t):txRow(t);
-function sharedRow(t){
+const delAct=ref=>`<div class="del-act"><button data-action="swdel" data-ref="${esc(ref)}" tabindex="-1">刪除</button></div>`;
+function sharedRow(t,noSwipe){
   const j=Cloud.jars[t.jid]||{};const me=myUid();
   let ic='🧾',t1='',sign='−',cls='';
   if(t.kind==='expense'){ic=t.emoji||'🧾';t1=t.catName||'支出'}
@@ -815,7 +823,9 @@ function sharedRow(t){
   else{ic='🔁';t1='從共用罐轉出'}
   const who=t.by===me?'你':(t.byName||'成員');
   const extra=(t.kind==='in'&&t.src?'從'+esc(t.src)+'・':'')+(t.kind==='withdraw'&&t.src?'到'+esc(t.src)+'・':'')+(t.note&&t.kind!=='in'?esc(t.note)+'・':'');
-  return `<li><button class="tx" data-action="stx" data-jid="${t.jid}" data-id="${esc(t.id)}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div>
+  const canDel=!noSwipe&&t.by===me&&(t.kind==='expense'||((t.id||'').startsWith('m_')&&S.txns.some(x=>x.id===t.id.slice(2))));
+  const ref=t.kind==='expense'?'s:'+t.jid+':'+t.id:'p:'+(t.id||'').slice(2);
+  return `<li${canDel?` class="swipe"`:''}>${canDel?delAct(ref):''}<button class="tx" data-action="stx" data-jid="${t.jid}" data-id="${esc(t.id)}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div>
     <div class="t2"><span class="dot" style="background:${j.color||'#999'}"></span>${esc(j.name||'共用罐')}（共用）・${extra}${esc(who)}</div></span><span class="amt num ${cls}">${sign}${money(t.amount)}</span></button></li>`;
 }
 function sortTx(a,b){return a.date<b.date?1:a.date>b.date?-1:(b.ts||0)-(a.ts||0)}
@@ -824,7 +834,7 @@ function txRow(t){
   if(t.type==='expense'){const c=catById(t.catId);const b=bucketById(t.bucketId);ic=c?c.emoji:'🧾';t1=c?c.name:'已刪除分類';t2=`<span class="dot" style="background:${b?b.color:'#999'}"></span>${esc(b?b.name:'—')}${t.note?'｜'+esc(t.note):''}`;amt='−'+money(t.amount)}
   else if(t.type==='income'){t1=t.note||'收入';t2=(t.mode==='one'?'全部放入・':(S.allocMode==='amount'?'依計畫・':'依比例・'))+Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>`${esc(nameOf(k))} ${money(v)}`).join('、');amt='+'+money(t.amount);cls='in'}
   else{ic='🔁';t1=`${nameOf(t.from)} → ${nameOf(t.to)}`;t2=t.note?esc(t.note):'罐子間轉移';amt=money(t.amount)}
-  return `<li><button class="tx" data-action="tx" data-id="${t.id}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div><div class="t2">${t2}</div></span><span class="amt num ${cls}">${amt}</span></button></li>`;
+  return `<li class="swipe">${delAct('p:'+t.id)}<button class="tx" data-action="tx" data-id="${t.id}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div><div class="t2">${t2}</div></span><span class="amt num ${cls}">${amt}</span></button></li>`;
 }
 function listView(){
   const chips=[`<button class="chip" data-action="lb" data-b="all" aria-pressed="${listBucket==='all'}">全部</button>`]
@@ -1010,11 +1020,63 @@ function openShared(jid,id){
     openSheet(addHtml());return;
   }
   const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'?'這是你每月計畫投入的金額，由你的收入分配自動產生。要調整的話，到設定頁修改「我每月投入」。':'這筆由你的帳本自動產生。';
-  openSheet(`<ul class="txs">${sharedRow(t)}</ul><p class="note">${t.date}</p><p class="note">${why}</p>
+  openSheet(`<ul class="txs">${sharedRow(t,true)}</ul><p class="note">${t.date}</p><p class="note">${why}</p>
     <button class="ghost" style="width:100%;margin-top:10px" data-action="close">關閉</button>`);
 }
 
-let tt=null;function toast(m){const el=document.getElementById('toast');el.textContent=m;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),1600)}
+let tt=null,undoFn=null;
+function toast(m,undo){
+  const el=document.getElementById('toast');undoFn=undo||null;
+  el.innerHTML=esc(m)+(undo?'<button class="undo" data-action="undo">復原</button>':'');
+  el.classList.toggle('act',!!undo);el.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>{el.classList.remove('show','act');undoFn=null},undo?4500:1600);
+}
+
+/* swipe left on a record to delete it */
+const DELW=84;let sw=null,openLi=null,suppressClick=false;
+function setX(li,x,anim){const b=li.querySelector('.tx');b.style.transition=anim?'':'none';b.style.transform=x?`translateX(${x}px)`:''}
+function closeSwipe(){if(openLi){setX(openLi,0,true);openLi=null}}
+document.addEventListener('pointerdown',e=>{
+  const li=e.target.closest('li.swipe');
+  if(openLi&&li!==openLi){closeSwipe();suppressClick=true;setTimeout(()=>suppressClick=false,400)}
+  if(!li||e.target.closest('.del-act'))return;
+  sw={li,x0:e.clientX,y0:e.clientY,dx:0,dir:null,base:li===openLi?-DELW:0};
+},{passive:true});
+document.addEventListener('pointermove',e=>{
+  if(!sw)return;
+  const dx=e.clientX-sw.x0,dy=e.clientY-sw.y0;
+  if(!sw.dir){if(Math.abs(dx)<8&&Math.abs(dy)<8)return;sw.dir=Math.abs(dx)>Math.abs(dy)?'h':'v'}
+  if(sw.dir!=='h')return;
+  sw.dx=dx;setX(sw.li,Math.min(0,Math.max(-DELW*1.4,sw.base+dx)),false);
+},{passive:true});
+function endSwipe(){
+  if(!sw)return;
+  if(sw.dir==='h'){
+    const x=sw.base+sw.dx;
+    if(x<-DELW/2){setX(sw.li,-DELW,true);openLi=sw.li}else{setX(sw.li,0,true);if(openLi===sw.li)openLi=null}
+    suppressClick=true;setTimeout(()=>suppressClick=false,400);
+  }
+  sw=null;
+}
+document.addEventListener('pointerup',endSwipe);
+document.addEventListener('pointercancel',()=>{if(sw&&sw.dir==='h'){setX(sw.li,sw.base,true)}sw=null});
+document.addEventListener('click',e=>{if(suppressClick&&!e.target.closest('.del-act')){e.preventDefault();e.stopPropagation();suppressClick=false}},true);
+
+function swipeDelete(ref){
+  openLi=null;
+  if(ref.startsWith('p:')){
+    const id=ref.slice(2),t=S.txns.find(x=>x.id===id);if(!t)return;
+    const copy=JSON.parse(JSON.stringify(t));
+    removeTxn(id);render();
+    toast('已刪除',()=>{putTxn(copy);render();toast('已復原')});
+  }else{
+    const [,jid,id]=ref.split(':');const t=(Cloud.jarTxns[jid]||[]).find(x=>x.id===id);if(!t||!cloudOn())return;
+    const {id:_i,jid:_j,...data}=t;
+    jarTxnRef(jid,id).delete().catch(()=>toast('刪除失敗'));
+    Cloud.jarTxns[jid]=Cloud.jarTxns[jid].filter(x=>x.id!==id);render();
+    toast('已刪除',()=>{jarTxnRef(jid,id).set(data).then(()=>toast('已復原')).catch(()=>toast('復原失敗'))});
+  }
+}
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
@@ -1030,6 +1092,8 @@ document.addEventListener('click',e=>{
     case 'save':saveDraft();break;
     case 'tx':openTx(id);break;
     case 'stx':openShared(el.dataset.jid,id);break;
+    case 'swdel':swipeDelete(el.dataset.ref);break;
+    case 'undo':{const f=undoFn;undoFn=null;document.getElementById('toast').classList.remove('show','act');if(f)f();break}
     case 'delstx':if(!confirm('確定刪除這筆紀錄？'))break;jarTxnRef(el.dataset.jid,id).delete().catch(()=>toast('刪除失敗'));closeSheet();render();toast('已刪除');break;
     case 'newjar':createJar();break;
     case 'invite':inviteTo(el.dataset.jid);break;
