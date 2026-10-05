@@ -143,6 +143,21 @@ label.f > *{margin-top:4px}
 .set-item.jc{grid-template-columns:52px 1fr 36px;border-bottom:1px solid var(--line)}
 .invite{border-color:var(--ink);margin-bottom:12px}
 .catgroup{font-size:12px;color:var(--muted);margin:14px 0 -6px}
+.pie{display:grid;grid-template-columns:136px 1fr;gap:16px;align-items:center;margin:18px 0 6px}
+.pie svg{width:136px;height:136px;display:block}
+.pie svg circle.seg{cursor:pointer;transition:stroke-width .15s}
+.pie svg circle.seg.dim{opacity:.25}
+.legend{display:grid;gap:2px;min-width:0}
+.lg{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center;background:none;border:0;border-radius:10px;padding:6px 8px;text-align:left;width:100%}
+.lg[aria-pressed="true"]{background:var(--chip)}
+.lg:disabled{cursor:default}
+.lg .sw{width:12px;height:12px;border-radius:4px}
+.lg .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.lg .vl{font-size:13px;text-align:right;line-height:1.3}
+.lg .vl small{display:block;color:var(--muted);font-size:12px}
+.pienote{font-size:13px;color:var(--muted);margin:2px 0 0}
+.catfilter{display:inline-flex;align-items:center;gap:6px;margin-top:10px;background:var(--chip);border:0;border-radius:999px;padding:6px 12px;font-size:13px}
+@media (max-width:360px){.pie{grid-template-columns:1fr}.pie svg{margin:0 auto}}
 .plan-extra{display:grid;gap:8px;margin-top:10px}
 .set-item.cat-item{grid-template-columns:52px 1fr 1fr 36px}
 .swatch{width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1.5px var(--line)}
@@ -206,7 +221,7 @@ function defaults(){
 
 let S=null;               // state
 let tab='home';
-let listMonth=today().slice(0,7), listBucket='all';
+let listMonth=today().slice(0,7), listBucket='all', listCat=null;
 let draft=null;
 const LSK='fenguan-ledger-v1';
 
@@ -873,12 +888,62 @@ function txRow(t){
   else{ic='🔁';t1=`${nameOf(t.from)} → ${nameOf(t.to)}`;t2=t.note?esc(t.note):'罐子間轉移';amt=money(t.amount)}
   return `<li class="swipe">${delAct('p:'+t.id)}<button class="tx" data-action="tx" data-id="${t.id}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div><div class="t2">${t2}</div></span><span class="amt num ${cls}">${amt}</span></button></li>`;
 }
+const CAT_COLORS=['#1F7A80','#D29A17','#8A4F7D','#3D6FB6','#5C8A3A','#C25B3A'];
+// slices for the pie: 'all' = spending per jar (my share for shared jars); a jar = spending per category
+function pieData(){
+  const m=listMonth,me=myUid();let slices=[],note='',kind;
+  if(listBucket==='all'){
+    kind='jar';
+    for(const b of S.buckets){const v=S.txns.filter(t=>t.type==='expense'&&t.bucketId===b.id&&t.date.slice(0,7)===m).reduce((a,t)=>a+t.amount,0);
+      if(v)slices.push({key:b.id,name:b.name,color:b.color,value:v})}
+    for(const j of jarsList()){const v=jarShare(j.id,m);if(v)slices.push({key:SJ+j.id,name:j.name+'（你的份額）',color:j.color,value:v})}
+    const toJar=S.buckets.reduce((a,b)=>a+((stats(null,m)[b.id]||{}).monthJar||0),0);
+    if(toJar)note=`另撥到共用罐 ${money(toJar)}，不計入圖表`;
+  }else{
+    kind='cat';const g={};
+    if(isSJ(listBucket)){
+      for(const t of (Cloud.jarTxns[sjId(listBucket)]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===m){
+        const k=t.catKey||t.catName||'?';(g[k]=g[k]||{key:k,name:t.catName||'支出',emoji:t.emoji||'🧾',value:0,count:0});g[k].value+=t.amount;g[k].count++}
+    }else{
+      for(const t of S.txns)if(t.type==='expense'&&t.bucketId===listBucket&&t.date.slice(0,7)===m){
+        const c=catById(t.catId),k=t.catId||'?';(g[k]=g[k]||{key:k,name:c?c.name:'已刪除分類',emoji:c?c.emoji:'🧾',value:0,count:0});g[k].value+=t.amount;g[k].count++}
+      const mj=(stats(null,m)[listBucket]||{}).monthJar||0;
+      if(mj)note=`另撥到共用罐 ${money(mj)}，不計入圖表`;
+    }
+    slices=Object.values(g);
+  }
+  slices.sort((a,b)=>b.value-a.value);
+  if(slices.length>6){const rest=slices.slice(5);slices=slices.slice(0,5).concat([{key:null,name:`其他 ${rest.length} 項`,value:rest.reduce((a,s)=>a+s.value,0),count:rest.reduce((a,s)=>a+(s.count||0),0),other:true}])}
+  slices.forEach((s,i)=>{if(!s.color)s.color=s.other?'#9AA5B1':CAT_COLORS[i%CAT_COLORS.length]});
+  return {kind,slices,note,total:slices.reduce((a,s)=>a+s.value,0)};
+}
+function pieHtml(){
+  const {kind,slices,note,total}=pieData();
+  if(!total)return `<div class="empty" style="padding:18px 0 4px">這個月沒有支出${note?`<div class="pienote">${note}</div>`:''}</div>`;
+  const R=46,C=2*Math.PI*R;let acc=0;
+  const segs=slices.map(s=>{const len=s.value/total*C,gap=slices.length>1?Math.min(1.2,len/3):0;
+    const el=`<circle class="seg ${listCat&&listCat!==s.key?'dim':''}" cx="60" cy="60" r="${R}" fill="none" stroke="${s.color}" stroke-width="18"
+      stroke-dasharray="${Math.max(0,len-gap)} ${C}" stroke-dashoffset="${-acc}" ${s.other?'':`data-action="pie" data-key="${esc(s.key)}"`}><title>${esc(s.name)} ${money(s.value)}</title></circle>`;
+    acc+=len;return el}).join('');
+  const legend=slices.map(s=>{const pct=Math.round(s.value/total*100);
+    return `<button class="lg" ${s.other?'disabled':`data-action="pie" data-key="${esc(s.key)}"`} aria-pressed="${!!listCat&&listCat===s.key}">
+      <span class="sw" style="background:${s.color}"></span><span class="nm">${s.emoji?esc(s.emoji)+' ':''}${esc(s.name)}</span>
+      <span class="vl num">${money(s.value)}<small>${pct}%${s.count?`・${s.count} 筆`:''}</small></span></button>`}).join('');
+  return `<div class="pie"><svg viewBox="0 0 120 120" role="img" aria-label="支出比例圖"><g transform="rotate(-90 60 60)">${segs}</g>
+    <text x="60" y="56" text-anchor="middle" font-size="9" fill="var(--muted)">${kind==='jar'?'總支出':'支出'}</text>
+    <text x="60" y="71" text-anchor="middle" font-size="${money(total).length>8?10:13}" font-weight="600" fill="var(--ink)" font-family="Sora, sans-serif">${money(total)}</text></svg>
+    <div class="legend">${legend}</div></div>${note?`<p class="pienote">${note}</p>`:''}
+    ${kind==='jar'?'<p class="pienote">點罐子可以看它的分類比例</p>':''}`;
+}
 function listView(){
   const chips=[`<button class="chip" data-action="lb" data-b="all" aria-pressed="${listBucket==='all'}">全部</button>`]
     .concat(S.buckets.map(b=>`<button class="chip" data-action="lb" data-b="${b.id}" aria-pressed="${listBucket===b.id}"><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</button>`))
     .concat(jarsList().map(j=>`<button class="chip" data-action="lb" data-b="${SJ+j.id}" aria-pressed="${listBucket===SJ+j.id}"><span class="dot" style="background:${j.color}"></span>${esc(j.name)}<span class="pill">共用</span></button>`)).join('');
   if(isSJ(listBucket)&&!Cloud.jars[sjId(listBucket)])listBucket='all';
   const items=monthItems(listMonth,listBucket);
+  if(listBucket==='all')listCat=null;
+  const catOf=t=>t.jid?(t.kind==='expense'?(t.catKey||t.catName||'?'):null):(t.type==='expense'?(t.catId||'?'):null);
+  const shown=listCat?items.filter(t=>catOf(t)===listCat):items;
   let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,toJar=0;
   for(const t of items){
     if(t.jid){
@@ -890,16 +955,21 @@ function listView(){
       if(t.type==='expense')sumOut+=t.amount;
       if(t.type==='income')sumIn+=listBucket==='all'?t.amount:(incAlloc(t)[listBucket]||0);
     }
+  }
+  for(const t of shown){
     if(t.date!==last){if(last)html+='</ul>';const d=new Date(t.date+'T00:00');html+=`<div class="day">${d.getMonth()+1}月${d.getDate()}日 週${'日一二三四五六'[d.getDay()]}</div><ul class="txs">`;last=t.date}
     html+=rowOf(t);
   }
   if(last)html+='</ul>';
+  const catLabel=listCat?((pieData().slices.find(s=>s.key===listCat)||{}).name||'這個分類'):'';
   return `<div style="display:grid;grid-template-columns:1fr;gap:12px">
     <input type="month" id="lm" value="${listMonth}" aria-label="選擇月份">
     <div class="filters">${chips}</div></div>
     <div class="total"><span>這個月</span><span class="num" style="text-align:right">${isSJ(listBucket)
       ?`共用支出 <b>${money(shOut)}</b>（你的份額 ${money(shMine)}）<br>撥入 <b>${money(sumIn)}</b>`
       :`個人支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${toJar?`<br>撥到共用罐 ${money(toJar)}`:''}${shOut?`<br>共用支出 ${money(shOut)}（你的份額 <b>${money(shMine)}</b>）`:''}`}</span></div>
+    ${pieHtml()}
+    ${listCat?`<button class="catfilter" data-action="pie" data-key="${esc(listCat)}">只看：${esc(catLabel)}　✕</button>`:''}
     ${html||'<div class="empty">這個月還沒有紀錄。</div>'}`;
 }
 function settingsView(){
@@ -1152,10 +1222,11 @@ document.addEventListener('click',e=>{
     case 'jaddc':{const j=Cloud.jars[el.dataset.jid];if(!j)break;j.categories=(j.categories||[]).concat([{id:uid(),emoji:'🏷️',name:'新分類'}]);saveJarMeta(el.dataset.jid,['categories']);render();break}
     case 'jdelc':{const j=Cloud.jars[el.dataset.jid];if(!j)break;j.categories=(j.categories||[]).filter(c=>c.id!==id);saveJarMeta(el.dataset.jid,['categories']);render();break}
     case 'deltx':if(!confirm('確定刪除這筆紀錄？'))break;removeTxn(id);closeSheet();render();toast('已刪除');break;
-    case 'mshift':listMonth=shiftMonth(listMonth,+el.dataset.d);render();break;
+    case 'mshift':listMonth=shiftMonth(listMonth,+el.dataset.d);listCat=null;render();break;
     case 'tolist':listBucket='all';tab='list';render();window.scrollTo(0,0);break;
-    case 'jump':listBucket=el.dataset.bucket;tab='list';render();window.scrollTo(0,0);break;
-    case 'lb':listBucket=el.dataset.b;render();break;
+    case 'pie':{const k=el.dataset.key;if(listBucket==='all'){listBucket=k;listCat=null}else listCat=listCat===k?null:k;render();break}
+    case 'jump':listBucket=el.dataset.bucket;listCat=null;tab='list';render();window.scrollTo(0,0);break;
+    case 'lb':listBucket=el.dataset.b;listCat=null;render();break;
     case 'color':{const b=bucketById(id);b.color=PALETTE[(PALETTE.indexOf(b.color)+1)%PALETTE.length];persist();render();break}
     case 'allocmode':setAllocMode(el.dataset.m);break;
     case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,amt:0,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break;
@@ -1198,7 +1269,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='importFile'&&t.files[0]){importData(t.files[0]);t.value='';return}
-  if(t.id==='lm'||t.id==='hm'){listMonth=t.value||curMonth();render();return}
+  if(t.id==='lm'||t.id==='hm'){listMonth=t.value||curMonth();listCat=null;render();return}
   if(t.dataset.edit==='bcarry'){bucketById(t.dataset.id).carry=t.checked;persist();render();return}
   if(draft){
     if(t.id==='date'){draft.date=t.value;updateHint();return}
