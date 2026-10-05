@@ -299,7 +299,7 @@ function subscribe(ref){
     if(snap.metadata.hasPendingWrites)return;
     const d=snap.data();
     S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.jarPlan=d.jarPlan||{};S.ledgerName=d.name||'我的帳本';
-    saveLocal();safeRender();
+    const mig=migrateJarPlan();saveLocal();safeRender();if(mig)persist();
     if(!Cloud.ledgerLoaded){Cloud.ledgerLoaded=true;startJars()}
     scheduleMirror();
   },fail));
@@ -382,7 +382,7 @@ function startJars(){
     // keep my contribution plan in step with membership
     let changed=false;S.jarPlan=S.jarPlan||{};
     for(const id in Cloud.jars){const jp=S.jarPlan[id];
-      if(!jp){S.jarPlan[id]={from:curMonth(),amt:0,pct:0,name:Cloud.jars[id].name};changed=true}
+      if(!jp){S.jarPlan[id]={from:curMonth(),hist:[{m:curMonth(),amt:0,src:defaultSrc()}],name:Cloud.jars[id].name};changed=true}
       else if(jp.until||jp.name!==Cloud.jars[id].name){if(jp.until&&jp.until<=curMonth())jp.from=curMonth();delete jp.until;jp.name=Cloud.jars[id].name;changed=true}}
     if(!qs.metadata.fromCache){
       for(const id in S.jarPlan){if(!Cloud.jars[id]&&!S.jarPlan[id].until){S.jarPlan[id].until=shiftMonth(curMonth(),1);changed=true}}
@@ -411,9 +411,8 @@ function watchInvites(){
 /* contributions and transfers I make are mirrored into the shared jar so every member sees them */
 function desiredMirrors(jid){
   const me=myUid(),nm=myName(),key=SJ+jid,jp=(S.jarPlan||{})[jid],res={};
-  const pt=planTotals();
-  for(const mk in pt){if(!jarActive(jp,mk))continue;const v=planAlloc(pt[mk],mk)[key]||0;
-    if(v>0)res['contrib_'+me+'_'+mk]={kind:'contrib',amount:v,date:mk+'-01',note:'',by:me,byName:nm}}
+  if(jp&&jp.from)for(let mk=jp.from;mk<=curMonth();mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);
+    if(c)res['contrib_'+me+'_'+mk]={kind:'contrib',amount:c.amt,date:mk+'-01',note:'',by:me,byName:nm,src:nameOf(c.src),srcId:c.src}}
   for(const t of S.txns){
     if(t.type==='transfer'&&t.to===key)res['m_'+t.id]={kind:'in',amount:t.amount,date:t.date,note:t.note||'',by:me,byName:nm,src:nameOf(t.from)};
     else if(t.type==='transfer'&&t.from===key)res['m_'+t.id]={kind:'withdraw',amount:t.amount,date:t.date,note:t.note||'',by:me,byName:nm,src:nameOf(t.to)};
@@ -425,7 +424,7 @@ let mirrorTimer=null;
 function scheduleMirror(){clearTimeout(mirrorTimer);mirrorTimer=setTimeout(syncMirrors,1200)}
 function syncMirrors(){
   if(!cloudOn()||!Cloud.ledgerLoaded||!Cloud.jarsLoaded)return;
-  const me=myUid(),sig=t=>[t.kind,t.amount,t.date,t.note||'',t.byName||'',t.src||''].join('|');
+  const me=myUid(),sig=t=>[t.kind,t.amount,t.date,t.note||'',t.byName||'',t.src||'',t.srcId||''].join('|');
   for(const jid in Cloud.jars){
     if(!Cloud.jarLoaded[jid])continue;
     const want=desiredMirrors(jid),have={};
@@ -445,7 +444,7 @@ async function createJar(){
   const data={name:'共用罐',color,owner:myUid(),members:[myUid()],memberInfo:{[myUid()]:{name:myName(),email:myEmail()}},
     categories:[{id:uid(),emoji:'🏠',name:'房租'},{id:uid(),emoji:'🛒',name:'家用'},{id:uid(),emoji:'🍽️',name:'聚餐'}],
     createdAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()};
-  S.jarPlan=S.jarPlan||{};S.jarPlan[ref.id]={from:curMonth(),amt:0,pct:0,name:data.name};
+  S.jarPlan=S.jarPlan||{};S.jarPlan[ref.id]={from:curMonth(),hist:[{m:curMonth(),amt:0,src:defaultSrc()}],name:data.name};
   Cloud.jars[ref.id]=data;persist();render();
   try{await ref.set(data);toast('已建立共用罐，可以改名並邀請對方')}catch(e){toast('建立失敗：'+(e.code||''))}
 }
@@ -538,9 +537,10 @@ function sharedHtml(){
     return `<div class="acct jarcard">
       <div class="jhead"><button class="swatch" style="background:${j.color}" ${owner?`data-action="jcolor" data-jid="${j.id}"`:'disabled'} aria-label="換顏色"></button>
         <input type="text" value="${esc(j.name)}" data-edit="jname" data-jid="${j.id}" ${owner?'':'disabled'} aria-label="共用罐名稱"><span class="pill">共用</span></div>
-      <label class="f">我每月投入${am?'金額':'比例（%）'}
-        <input type="number" inputmode="numeric" min="0" ${am?'step="100"':'max="100"'} value="${am?(+jp.amt||0):(+jp.pct||0)}" data-edit="jplan" data-jid="${j.id}"></label>
-      <div class="note" style="margin-top:-4px">這部分會從你的收入分配出來，放進共用罐。只有你看得到自己設定多少。</div>
+      ${(()=>{const e=jarEff(jp,curMonth())||{amt:0,src:defaultSrc()};
+        return `<div class="row2" style="margin-top:0"><label class="f">資金來源<select data-edit="jsrc" data-jid="${j.id}">${S.buckets.map(b=>`<option value="${b.id}" ${b.id===e.src?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
+        <label class="f">每月撥款<input type="number" inputmode="numeric" min="0" step="100" value="${+e.amt||0}" data-edit="jamt" data-jid="${j.id}"></label></div>
+        <div class="note" style="margin-top:-4px">每月從「${esc(nameOf(e.src))}」撥進共用罐，單向不退回。修改從這個月開始生效，過去的月份維持原本的金額。只有你看得到自己的設定。</div>`})()}
       <div class="sub">成員</div>${members}${pend}
       ${owner?`<div class="invrow"><input type="email" id="inv-${j.id}" placeholder="對方登入用的 Email" inputmode="email"><button class="gbtn" data-action="invite" data-jid="${j.id}">邀請</button></div>`:''}
       <div class="sub">共用分類</div>${cats}
@@ -597,7 +597,7 @@ function setAllocMode(m){
   if(m==='amount'&&planSum()===0){ // first switch: suggest amounts from the latest month's income
     const pt=planTotals(),mk=Object.keys(pt).sort().pop(),T=mk?pt[mk]:0;
     const tot=targets().reduce((a,b)=>a+b.pct,0)||1;
-    if(T>0){S.buckets.forEach(b=>b.amt=Math.round(T*(+b.pct||0)/tot/100)*100);for(const jid in (S.jarPlan||{}))S.jarPlan[jid].amt=Math.round(T*(+S.jarPlan[jid].pct||0)/tot/100)*100;filled=true}
+    if(T>0){S.buckets.forEach(b=>b.amt=Math.round(T*(+b.pct||0)/tot/100)*100);filled=true}
     if(!bucketById(S.remainderId))S.remainderId=(S.buckets.find(b=>/彈性/.test(b.name))||S.buckets[S.buckets.length-1]).id;
   }
   S.allocMode=m;persist();render();
@@ -614,7 +614,7 @@ function migrate(){
 }
 function init(){
   S=loadLocal()||defaults();
-  migrate();saveLocal();
+  migrate();migrateJarPlan();saveLocal();
   render();
   syncStatus();
   cloudInit();
@@ -650,12 +650,28 @@ const SJ='sj:';
 const isSJ=id=>typeof id==='string'&&id.startsWith(SJ);
 const sjId=id=>id.slice(SJ.length);
 const jarActive=(jp,mk)=>!!jp&&(!jp.from||mk>=jp.from)&&(!jp.until||mk<jp.until);
-function jarTargets(mk){ // shared jars I contribute to in month mk
-  mk=mk||curMonth();const r=[],jp=S.jarPlan||{};
-  for(const jid in jp)if(jarActive(jp[jid],mk))r.push({id:SJ+jid,pct:+jp[jid].pct||0,amt:+jp[jid].amt||0});
-  return r;
+function targets(mk){return S.buckets.map(b=>({id:b.id,pct:+b.pct||0,amt:+b.amt||0}))}
+// my contribution plan for a shared jar: hist = [{m:'YYYY-MM', amt, src}] — each entry applies from its month on
+function defaultSrc(){const b=S.buckets.find(b=>/日常/.test(b.name))||S.buckets.find(b=>!isRemainder(b))||S.buckets[0];return b?b.id:null}
+function jarEff(jp,mk){if(!jp||!jp.hist)return null;let e=null;for(const x of jp.hist)if(x.m<=mk)e=x;return e}
+function jarContrib(jp,mk){ // {amt,src} actually moved in month mk (never beyond the current month)
+  if(!jarActive(jp,mk)||mk>curMonth())return null;
+  const e=jarEff(jp,mk);if(!e||!(+e.amt>0)||!bucketById(e.src))return null;
+  return {amt:+e.amt,src:e.src};
 }
-function targets(mk){return S.buckets.map(b=>({id:b.id,pct:+b.pct||0,amt:+b.amt||0})).concat(jarTargets(mk))}
+function setJarPlan(jid,field,val){ // changes take effect from the current month; past months keep their amount
+  const jp=(S.jarPlan||{})[jid];if(!jp)return;
+  jp.hist=jp.hist||[];const m=curMonth(),last=jp.hist[jp.hist.length-1];
+  const base=jarEff(jp,m)||{amt:0,src:defaultSrc()};
+  if(last&&last.m===m)last[field]=val;
+  else jp.hist.push(Object.assign({m:(jp.from&&jp.from>m)?jp.from:m,amt:base.amt,src:base.src},{[field]:val}));
+}
+function migrateJarPlan(){
+  let changed=false;
+  for(const jid in (S.jarPlan||{})){const jp=S.jarPlan[jid];
+    if(!jp.hist){jp.hist=[{m:jp.from||curMonth(),amt:+jp.amt||0,src:defaultSrc()}];delete jp.amt;delete jp.pct;changed=true}}
+  return changed;
+}
 function allocate(amount,mode,target,mk){
   const res={};
   if(mode==='one'){res[target]=amount;return res}
@@ -700,7 +716,7 @@ const carries=b=>b.carry!==false||isRemainder(b); // the designated jar always c
 function stats(excludeId,month){
   month=month||curMonth();
   const per={};S.buckets.forEach(b=>per[b.id]={});
-  const add=(id,mk,f,v)=>{const p=per[id];if(!p)return;(p[mk]||(p[mk]={i:0,o:0}))[f]+=v};
+  const add=(id,mk,f,v)=>{const p=per[id];if(!p)return;(p[mk]||(p[mk]={i:0,o:0,j:0}))[f]+=v};
   for(const t of S.txns){
     if(t.id===excludeId)continue;
     const mk=t.date.slice(0,7);if(mk>month)continue;
@@ -710,6 +726,8 @@ function stats(excludeId,month){
   }
   const pt=planTotals(excludeId);
   for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk],mk);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
+  for(const jid in (S.jarPlan||{})){const jp=S.jarPlan[jid];
+    for(let mk=jp.from||month;mk<=month;mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);if(c){add(c.src,mk,'o',c.amt);add(c.src,mk,'j',c.amt)}}}
   // walk month by month: carrying jars keep their balance; reset jars settle at month end into the designated jar
   const rem=remainderBucket();
   const months=new Set([month]);for(const id in per)for(const mk in per[id])months.add(mk);
@@ -718,8 +736,8 @@ function stats(excludeId,month){
   for(const mk of [...months].sort()){
     const isTarget=mk===month;
     for(const b of S.buckets){
-      const cur=per[b.id][mk]||{i:0,o:0};
-      if(isTarget)out[b.id]={open:bal[b.id],monthIn:cur.i,monthOut:cur.o,bal:bal[b.id]+cur.i-cur.o,sweep:0};
+      const cur=per[b.id][mk]||{i:0,o:0,j:0};
+      if(isTarget)out[b.id]={open:bal[b.id],monthIn:cur.i,monthOut:cur.o,monthJar:cur.j,bal:bal[b.id]+cur.i-cur.o,sweep:0};
       bal[b.id]+=cur.i-cur.o;
     }
     if(isTarget)break;
@@ -768,12 +786,26 @@ function jarCol(id,name,color,s,sub,shared){
     <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
     <div class="jarsub">${sub}</div></button>`;
 }
-function monthRow(name,color,s,shared){
-  const avail=Math.max(0,s.open)+s.monthIn,base=Math.max(avail,s.monthOut,1);
-  return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">花了 ${money(s.monthOut)} ／ 可用 ${money(avail)}</span></div>
-  <div class="bar"><i style="width:${Math.min(100,s.monthOut/base*100)}%;background:${s.monthOut>avail?'var(--neg)':color}"></i></div></div>`;
+// my share of a shared expense: split by the member count when it was recorded
+function myShare(t){const n=t.split||((Cloud.jars[t.jid]||{}).members||[]).length||1;return Math.round(t.amount/n)}
+function sharedMonth(month){ // shared expenses this month: total and my share
+  let total=0,share=0;
+  for(const j of jarsList())for(const t of (Cloud.jarTxns[j.id]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===month){total+=t.amount;share+=myShare(t)}
+  return {total,share};
 }
-// records for a month: my own + shared-jar records (my own mirrors are already shown as my transfers/income)
+function monthRow(name,color,s,shared,jid){
+  const avail=Math.max(0,s.open)+s.monthIn;
+  const spent=s.monthOut-(s.monthJar||0),used=s.monthOut,base=Math.max(avail,used,1);
+  let lab;
+  if(shared){const sm=jarShare(jid,listMonth);lab=`共用支出 ${money(s.monthOut)}（你的份額 ${money(sm)}）／ 可用 ${money(avail)}`}
+  else lab=`花了 ${money(spent)}${s.monthJar?`・撥共用 ${money(s.monthJar)}`:''} ／ 可用 ${money(avail)}`;
+  const jarW=s.monthJar?Math.min(100,s.monthJar/base*100):0,spW=Math.min(100-jarW,Math.max(0,spent)/base*100);
+  return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">${lab}</span></div>
+  <div class="bar" style="display:flex">${jarW?`<i style="width:${jarW}%;background:${color};opacity:.45;border-radius:4px 0 0 4px"></i>`:''}<i style="width:${spW}%;background:${used>avail?'var(--neg)':color};${jarW?'border-radius:0 4px 4px 0':''}"></i></div></div>`;
+}
+function jarShare(jid,month){let s=0;for(const t of (Cloud.jarTxns[jid]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===month)s+=myShare(t);return s}
+// records for a month: my own records + shared-jar records.
+// My mirrored transfers already appear as my own transfers; my monthly contribution shows under its source jar.
 function monthItems(month,filter){
   const me=myUid();filter=filter||'all';
   let own=[],sh=[];
@@ -783,10 +815,13 @@ function monthItems(month,filter){
   }
   for(const j of jarsList()){
     if(isSJ(filter)&&sjId(filter)!==j.id)continue;
-    if(!isSJ(filter)&&filter!=='all')continue;
     for(const t of (Cloud.jarTxns[j.id]||[])){
       if(t.date.slice(0,7)!==month)continue;
-      if(filter==='all'&&t.by===me&&isMirror(t))continue;
+      if(!isSJ(filter)){
+        const mineContrib=t.by===me&&t.kind==='contrib';
+        if(filter!=='all'){if(!(mineContrib&&t.srcId===filter))continue}
+        else if(t.by===me&&isMirror(t)&&!mineContrib)continue;
+      }
       sh.push(t);
     }
   }
@@ -801,7 +836,8 @@ function homeView(){
   const shared=jarsList();
   const sjars=shared.map(j=>{const s=jarStats(j.id,listMonth);return jarCol(SJ+j.id,j.name,j.color,s,`${(j.members||[]).length} 人共用`+(s.open?`<br>上月結轉 ${money(s.open)}`:''),true)}).join('');
   const total=S.buckets.reduce((a,b)=>a+st[b.id].bal,0);
-  const monthRows=S.buckets.map(b=>monthRow(b.name,b.color,st[b.id],false)).join('')+shared.map(j=>monthRow(j.name,j.color,jarStats(j.id,listMonth),true)).join('');
+  const monthRows=S.buckets.map(b=>monthRow(b.name,b.color,st[b.id],false)).join('')+shared.map(j=>monthRow(j.name,j.color,jarStats(j.id,listMonth),true,j.id)).join('');
+  const own=S.txns.filter(t=>t.type==='expense'&&t.date.slice(0,7)===listMonth).reduce((a,t)=>a+t.amount,0),sm=sharedMonth(listMonth);
   const items=monthItems(listMonth,'all');
   const isNow=listMonth===curMonth();
   const any=S.txns.length||shared.length;
@@ -809,7 +845,8 @@ function homeView(){
   return `${cloudOn()?invitesHtml():''}${monthNav()}<div class="shelf">${jars}${sjars}</div>
   <div class="total"><span>${isNow?'目前':'月底'}${shared.length?'我的罐子':'所有罐子'}合計</span><b class="num ${total<0?'neg':''}">${money(total)}</b></div>
   ${empty}
-  ${any?`<h2>這個月各罐</h2><div class="month-row">${monthRows}</div>
+  ${any?`<div class="total" style="margin-top:0;border-top:0"><span>這個月支出</span><span class="num"><b>${money(own+sm.share)}</b>${shared.length?`<br><span class="note">個人 ${money(own)}＋共用份額 ${money(sm.share)}</span>`:''}</span></div>
+  <h2>這個月各罐</h2><div class="month-row">${monthRows}</div>
   <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(rowOf).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
 }
 const rowOf=t=>t.jid?sharedRow(t):txRow(t);
@@ -818,15 +855,15 @@ function sharedRow(t,noSwipe){
   const j=Cloud.jars[t.jid]||{};const me=myUid();
   let ic='🧾',t1='',sign='−',cls='';
   if(t.kind==='expense'){ic=t.emoji||'🧾';t1=t.catName||'支出'}
-  else if(t.kind==='contrib'){ic='🫙';t1='每月計畫投入';sign='+';cls='in'}
+  else if(t.kind==='contrib'){ic='🫙';t1='每月撥款';sign='+';cls='in'}
   else if(t.kind==='in'){ic='💵';t1=t.note||'投入';sign='+';cls='in'}
   else{ic='🔁';t1='從共用罐轉出'}
   const who=t.by===me?'你':(t.byName||'成員');
-  const extra=(t.kind==='in'&&t.src?'從'+esc(t.src)+'・':'')+(t.kind==='withdraw'&&t.src?'到'+esc(t.src)+'・':'')+(t.note&&t.kind!=='in'?esc(t.note)+'・':'');
+  const extra=((t.kind==='in'||t.kind==='contrib')&&t.src?'從'+esc(t.src)+'・':'')+(t.kind==='withdraw'&&t.src?'到'+esc(t.src)+'・':'')+(t.note&&t.kind!=='in'?esc(t.note)+'・':'');
   const canDel=!noSwipe&&t.by===me&&(t.kind==='expense'||((t.id||'').startsWith('m_')&&S.txns.some(x=>x.id===t.id.slice(2))));
   const ref=t.kind==='expense'?'s:'+t.jid+':'+t.id:'p:'+(t.id||'').slice(2);
   return `<li${canDel?` class="swipe"`:''}>${canDel?delAct(ref):''}<button class="tx" data-action="stx" data-jid="${t.jid}" data-id="${esc(t.id)}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div>
-    <div class="t2"><span class="dot" style="background:${j.color||'#999'}"></span>${esc(j.name||'共用罐')}（共用）・${extra}${esc(who)}</div></span><span class="amt num ${cls}">${sign}${money(t.amount)}</span></button></li>`;
+    <div class="t2"><span class="dot" style="background:${j.color||'#999'}"></span>${esc(j.name||'共用罐')}（共用）・${extra}${esc(who)}${t.kind==='expense'?'・你的份額 '+money(myShare(t)):''}</div></span><span class="amt num ${cls}">${sign}${money(t.amount)}</span></button></li>`;
 }
 function sortTx(a,b){return a.date<b.date?1:a.date>b.date?-1:(b.ts||0)-(a.ts||0)}
 function txRow(t){
@@ -842,9 +879,13 @@ function listView(){
     .concat(jarsList().map(j=>`<button class="chip" data-action="lb" data-b="${SJ+j.id}" aria-pressed="${listBucket===SJ+j.id}"><span class="dot" style="background:${j.color}"></span>${esc(j.name)}<span class="pill">共用</span></button>`)).join('');
   if(isSJ(listBucket)&&!Cloud.jars[sjId(listBucket)])listBucket='all';
   const items=monthItems(listMonth,listBucket);
-  let html='',last='',sumOut=0,sumIn=0;
+  let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,toJar=0;
   for(const t of items){
-    if(t.jid){if(jarIn(t))sumIn+=t.amount;else sumOut+=t.amount}
+    if(t.jid){
+      if(t.kind==='expense'){shOut+=t.amount;shMine+=myShare(t)}
+      else if(isSJ(listBucket)){if(jarIn(t))sumIn+=t.amount}
+      else if(t.kind==='contrib'&&t.by===myUid())toJar+=t.amount;
+    }
     else{
       if(t.type==='expense')sumOut+=t.amount;
       if(t.type==='income')sumIn+=listBucket==='all'?t.amount:(incAlloc(t)[listBucket]||0);
@@ -856,7 +897,9 @@ function listView(){
   return `<div style="display:grid;grid-template-columns:1fr;gap:12px">
     <input type="month" id="lm" value="${listMonth}" aria-label="選擇月份">
     <div class="filters">${chips}</div></div>
-    <div class="total"><span>這個月</span><span class="num">支出 <b>${money(sumOut)}</b>　${isSJ(listBucket)?'投入':'收入'} <b>${money(sumIn)}</b></span></div>
+    <div class="total"><span>這個月</span><span class="num" style="text-align:right">${isSJ(listBucket)
+      ?`共用支出 <b>${money(shOut)}</b>（你的份額 ${money(shMine)}）<br>撥入 <b>${money(sumIn)}</b>`
+      :`個人支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${toJar?`<br>撥到共用罐 ${money(toJar)}`:''}${shOut?`<br>共用支出 ${money(shOut)}（你的份額 <b>${money(shMine)}</b>）`:''}`}</span></div>
     ${html||'<div class="empty">這個月還沒有紀錄。</div>'}`;
 }
 function settingsView(){
@@ -885,7 +928,6 @@ function settingsView(){
   :`<div class="pctsum ${sum===100?'':'bad'}">合計 ${sum}%${sum===100?'':'，建議調整到 100%（目前會依比例換算）'}</div>`}
   <div class="plan-extra"><label class="f">指定罐子：${am?'收入超過計畫的錢，以及':''}歸零罐子月底的剩餘或超支，都由這個罐子承接<select data-edit="remainder">${opts(remainderBucket()?.id)}</select></label>
   ${am?'<p class="note" style="margin:0">收入不足計畫時，會依各罐計畫金額等比例分配。</p>':''}</div>
-  ${jarTargets().length?`<p class="note">${am?'計畫合計':'合計'}已包含你對共用罐的投入。</p>`:''}
   <button class="ghost" style="margin-top:12px" data-action="addb">新增罐子</button>
   <h2>共用罐子</h2>
   ${sharedHtml()}
@@ -987,7 +1029,8 @@ function saveDraft(){
   if(c&&c.shared){ // goes into the shared jar
     if(!cloudOn()){toast('需要登入才能記到共用罐');return}
     const id=(oldS&&oldS.jid===c.jid)?oldS.id:uid();
-    const doc={kind:'expense',amount:amt,date,note,by:myUid(),byName:myName(),emoji:c.emoji,catName:c.name,catKey:c.key,ts:(oldS&&oldS.ts)||Date.now()};
+    const keepSplit=oldS&&oldS.jid===c.jid&&oldS.split;
+    const doc={kind:'expense',amount:amt,date,note,by:myUid(),byName:myName(),emoji:c.emoji,catName:c.name,catKey:c.key,split:keepSplit||((Cloud.jars[c.jid]||{}).members||[]).length||1,ts:(oldS&&oldS.ts)||Date.now()};
     jarTxnRef(c.jid,id).set(doc).catch(e=>toast('共用罐儲存失敗：'+(e.code||'')));
     if(oldS&&oldS.jid!==c.jid)jarTxnRef(oldS.jid,oldS.id).delete().catch(()=>{});
     if(oldP)removeTxn(oldP.id);
@@ -1016,10 +1059,10 @@ function openShared(jid,id){
   const me=myUid();
   if(t.by===me&&id.startsWith('m_')&&S.txns.find(x=>x.id===id.slice(2))){openTx(id.slice(2));return}
   if(t.by===me&&t.kind==='expense'){
-    draft={editShared:{jid,id,ts:t.ts},type:'expense',amount:String(t.amount),date:t.date,note:t.note||'',catId:resolveCat(t.catKey)?t.catKey:null,mode:'pct'};
+    draft={editShared:{jid,id,ts:t.ts,split:t.split},type:'expense',amount:String(t.amount),date:t.date,note:t.note||'',catId:resolveCat(t.catKey)?t.catKey:null,mode:'pct'};
     openSheet(addHtml());return;
   }
-  const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'?'這是你每月計畫投入的金額，由你的收入分配自動產生。要調整的話，到設定頁修改「我每月投入」。':'這筆由你的帳本自動產生。';
+  const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'?'這是你每月從自己的罐子撥進共用罐的金額。要調整的話，到設定頁修改這個共用罐的「每月撥款」。':'這筆由你的帳本自動產生。';
   openSheet(`<ul class="txs">${sharedRow(t,true)}</ul><p class="note">${t.date}</p><p class="note">${why}</p>
     <button class="ghost" style="width:100%;margin-top:10px" data-action="close">關閉</button>`);
 }
@@ -1117,7 +1160,7 @@ document.addEventListener('click',e=>{
     case 'allocmode':setAllocMode(el.dataset.m);break;
     case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,amt:0,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break;
     case 'delb':{
-      const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id);
+      const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id)||Object.values(S.jarPlan||{}).some(jp=>(jp.hist||[]).some(x=>x.src===id&&+x.amt>0));
       if(S.buckets.length<=1){toast('至少要保留一個罐子');break}
       if(used){toast('這個罐子有紀錄或分類在用，先把分類改到別的罐子');break}
       S.buckets=S.buckets.filter(b=>b.id!==id);if(S.remainderId===id)S.remainderId=S.buckets[S.buckets.length-1].id;persist();render();break}
@@ -1144,9 +1187,7 @@ document.addEventListener('input',e=>{
     else{const c=(j.categories||[]).find(x=>x.id===t.dataset.id);if(!c)return;c[ed==='jcemoji'?'emoji':'name']=t.value;saveJarMeta(t.dataset.jid,['categories'])}
     return;
   }
-  if(ed==='jplan'){const jp=(S.jarPlan||{})[t.dataset.jid];if(!jp)return;const v=Math.max(0,parseInt(t.value)||0);
-    if(S.allocMode==='amount'){jp.amt=v;const ps=document.querySelector('#plansum b');if(ps)ps.textContent=money(planSum())}else jp.pct=Math.min(100,v);
-    persist();return}
+  if(ed==='jamt'){setJarPlan(t.dataset.jid,'amt',Math.max(0,parseInt(t.value)||0));persist();return}
   if(ed==='bname')bucketById(t.dataset.id).name=t.value;
   if(ed==='bpct'){bucketById(t.dataset.id).pct=Math.max(0,Math.min(100,parseInt(t.value)||0));const sum=targets().reduce((a,b)=>a+b.pct,0);const ps=document.querySelector('.pctsum');if(ps){ps.textContent='合計 '+sum+'%'+(sum===100?'':'，建議調整到 100%（目前會依比例換算）');ps.classList.toggle('bad',sum!==100)}}
   if(ed==='bamt'){bucketById(t.dataset.id).amt=Math.max(0,parseInt(t.value)||0);const ps=document.querySelector('#plansum b');if(ps)ps.textContent=money(planSum())}
@@ -1168,7 +1209,8 @@ document.addEventListener('change',e=>{
   }
   if(t.dataset.edit==='cbucket'){catById(t.dataset.id).bucketId=t.value;persist();render()}
   if(t.dataset.edit==='remainder'){S.remainderId=t.value;const b=bucketById(t.value);if(b&&b.carry===false){b.carry=true;toast(`「${b.name}」是指定罐子，已改為結轉`)}persist();render();return}
-  if(['bname','bpct','bamt','jplan','jname'].includes(t.dataset.edit))render();
+  if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
+  if(['bname','bpct','bamt','jamt','jname'].includes(t.dataset.edit))render();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){const b=document.getElementById('saveBtn');if(b&&!b.disabled)saveDraft()}});
 const obs=new MutationObserver(()=>{if(draft&&document.getElementById('hint')&&!document.getElementById('hint').dataset.init){document.getElementById('hint').dataset.init=1;updateHint()}});
