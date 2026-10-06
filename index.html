@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#E8EDF1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>分罐記帳</title>
@@ -34,6 +34,10 @@
 html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55;-webkit-tap-highlight-color:transparent;min-height:100%}
 button,input,select{font:inherit;color:inherit}
+/* iPhone zooms in on any field smaller than 16px when it gets focus */
+input,select,textarea{font-size:16px}
+/* no double-tap zoom */
+html,body{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .num{font-family:var(--num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
@@ -627,6 +631,9 @@ function migrate(){
     delete t.alloc;
   }
 }
+// iPhone Safari ignores user-scalable=no for pinch, so block the pinch gesture itself
+['gesturestart','gesturechange','gestureend'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
+document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
 function init(){
   S=loadLocal()||defaults();
   migrate();migrateJarPlan();saveLocal();
