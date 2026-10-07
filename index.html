@@ -164,6 +164,14 @@ label.f > *{margin-top:4px}
 @media (max-width:360px){.pie{grid-template-columns:1fr}.pie svg{margin:0 auto}}
 .plan-extra{display:grid;gap:8px;margin-top:10px}
 .set-item.cat-item{grid-template-columns:52px 1fr 1fr 36px}
+.emo{width:48px;height:42px;font-size:22px;line-height:1;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);padding:0}
+.emogrp{font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 6px}
+.emogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:4px}
+.emogrid button{height:46px;font-size:24px;border:2px solid transparent;border-radius:12px;background:none;padding:0}
+.emogrid button[aria-pressed="true"]{border-color:var(--ink);background:var(--chip)}
+.emocur{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
+.emocur span{font-size:30px}
+.emocustom{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:6px}
 .swatch{width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1.5px var(--line)}
 .icon-btn{background:none;border:0;width:36px;height:36px;border-radius:10px;color:var(--muted);font-size:18px}
 .pctsum{font-size:13px;margin-top:8px}
@@ -550,7 +558,7 @@ function sharedHtml(){
     const members=(j.members||[]).map(u=>`<div class="mem"><span>${esc(memberName(j,u))}${u===j.owner?'（擁有者）':''}${u===me?'・你':''}</span>${owner&&u!==me?`<button class="icon-btn" data-action="rmmember" data-jid="${j.id}" data-id="${u}" aria-label="移除成員">✕</button>`:''}</div>`).join('');
     const pend=owner?Cloud.sent.filter(x=>x.jid===j.id).map(x=>`<div class="mem"><span class="note">${esc(x.email)}・等待接受</span><button class="icon-btn" data-action="uninvite" data-id="${esc(x.id)}" aria-label="取消邀請">✕</button></div>`).join(''):'';
     const cats=(j.categories||[]).map(c=>`<div class="set-item cat-item jc">
-      <input type="text" value="${esc(c.emoji)}" data-edit="jcemoji" data-jid="${j.id}" data-id="${c.id}" aria-label="圖示" style="text-align:center">
+      <button class="emo" data-action="emopick" data-jid="${j.id}" data-id="${c.id}" aria-label="更換圖示，目前是 ${esc(c.emoji)}">${esc(c.emoji)}</button>
       <input type="text" value="${esc(c.name)}" data-edit="jcname" data-jid="${j.id}" data-id="${c.id}" aria-label="分類名稱">
       <button class="icon-btn" data-action="jdelc" data-jid="${j.id}" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
     return `<div class="acct jarcard">
@@ -992,7 +1000,7 @@ function settingsView(){
   const opts=id=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
   const copts=id=>opts(id)+jarsList().map(j=>`<option value="${SJ+j.id}" ${SJ+j.id===id?'selected':''}>${esc(j.name)}（共用）</option>`).join('');
   const cl=S.categories.map(c=>`<div class="set-item cat-item">
-    <input type="text" value="${esc(c.emoji)}" data-edit="cemoji" data-id="${c.id}" aria-label="圖示" style="text-align:center">
+    <button class="emo" data-action="emopick" data-id="${c.id}" aria-label="更換圖示，目前是 ${esc(c.emoji)}">${esc(c.emoji)}</button>
     <input type="text" value="${esc(c.name)}" data-edit="cname" data-id="${c.id}" aria-label="分類名稱">
     <select data-edit="cbucket" data-id="${c.id}" aria-label="扣款罐子">${copts(c.bucketId)}</select>
     <button class="icon-btn" data-action="delc" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
@@ -1024,6 +1032,46 @@ function settingsView(){
 
 /* ---------- sheet ---------- */
 function openSheet(html){document.getElementById('sheetBody').innerHTML='<div class="grab"></div>'+html;document.getElementById('scrim').classList.add('open');document.getElementById('sheet').classList.add('open')}
+/* ---------- emoji picker ---------- */
+const EMOJI_GROUPS=[
+  ['餐飲','🍱 🍜 🍔 🍕 🍣 🍙 🥗 🍝 🥟 🍳 🥐 🍰 🍩 ☕ 🧋 🍺 🍷 🥤 🍎 🛒'],
+  ['交通','🚌 🚇 🚆 🚕 🚗 🛵 🚲 ⛽ 🅿️ ✈️ 🚄 ⛴️ 🛣️ 🧳'],
+  ['居家','🏠 🔑 🛋️ 🛏️ 🧺 🧹 🧼 🪴 💡 🔌 💧 🔥 📶 📱 🧾 📦'],
+  ['購物','🛍️ 👕 👖 👗 👟 👜 💄 🧴 🎁 💍 🕶️ ⌚ 💻 🎧 📷 🧸'],
+  ['娛樂','🎬 🎮 🎤 🎵 🎨 📚 🎲 🏀 ⚽ 🏸 🏊 🎳 🎟️ 🏕️ 🎡 🧩'],
+  ['健康','💊 🏥 🩺 🦷 👓 🧘 💪 🏃 💆 ✂️ 🧖 🩹'],
+  ['家人與寵物','👶 🧒 👪 🐶 🐱 🐾 💐 🎂 🎉 💌 🙏 🎓 📖 ✏️'],
+  ['金融','💰 💵 💳 🏦 📈 📉 🪙 💹 🧮 🛡️ 📊 💸 🏧'],
+  ['其他','🏷️ ⭐ ❤️ 📌 🔔 🗓️ 🌱 ☀️ 🌧️ 🎄 🧧 🎃 ❓']
+].map(([n,s])=>[n,s.split(' ')]);
+let emoTarget=null; // {id, jid?}
+function emoTargetCat(){
+  if(!emoTarget)return null;
+  if(emoTarget.jid){const j=Cloud.jars[emoTarget.jid];return j&&(j.categories||[]).find(c=>c.id===emoTarget.id)||null}
+  return catById(emoTarget.id);
+}
+function openEmoji(id,jid){
+  emoTarget={id,jid:jid||null};const c=emoTargetCat();if(!c)return;
+  const cur=c.emoji;
+  const groups=EMOJI_GROUPS.map(([n,list])=>`<div class="emogrp">${n}</div><div class="emogrid">${list.map(e=>`<button data-action="emoset" data-e="${e}" aria-pressed="${e===cur}" aria-label="${e}">${e}</button>`).join('')}</div>`).join('');
+  openSheet(`<div class="emocur"><span>${esc(cur)}</span>選擇「${esc(c.name)}」的圖示</div>${groups}
+    <div class="emogrp">清單裡沒有？</div>
+    <div class="emocustom"><input type="text" id="emocustom" placeholder="用 emoji 鍵盤輸入一個" autocomplete="off" aria-label="自訂 emoji"><button class="gbtn" data-action="emocustom">使用</button></div>
+    <p class="note" style="margin:6px 0 0">只會保留最後輸入的一個 emoji，文字會被忽略。</p>`);
+}
+// keep only the last emoji typed (handles flags, skin tones and joined emoji as one character)
+function lastEmoji(str){
+  const parts=typeof Intl!=='undefined'&&Intl.Segmenter?[...new Intl.Segmenter('zh',{granularity:'grapheme'}).segment(str)].map(s=>s.segment):Array.from(str);
+  const em=parts.filter(g=>/\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(g));
+  return em.length?em[em.length-1]:'';
+}
+function applyEmoji(e){
+  const c=emoTargetCat();
+  if(!c||!e){closeSheet();return} // nothing chosen: keep the existing emoji
+  c.emoji=e;
+  if(emoTarget.jid)saveJarMeta(emoTarget.jid,['categories']);else persist();
+  emoTarget=null;closeSheet();render();
+}
 function closeSheet(){document.getElementById('scrim').classList.remove('open');document.getElementById('sheet').classList.remove('open');draft=null}
 
 function openAdd(type){
@@ -1213,6 +1261,9 @@ document.addEventListener('click',e=>{
     case 'tx':openTx(id);break;
     case 'stx':openShared(el.dataset.jid,id);break;
     case 'swdel':swipeDelete(el.dataset.ref);break;
+    case 'emopick':openEmoji(id,el.dataset.jid);break;
+    case 'emoset':applyEmoji(el.dataset.e);break;
+    case 'emocustom':{const v=lastEmoji(document.getElementById('emocustom').value);if(!v){toast('請輸入一個 emoji');break}applyEmoji(v);break}
     case 'undo':{const f=undoFn;undoFn=null;document.getElementById('toast').classList.remove('show','act');if(f)f();break}
     case 'delstx':if(!confirm('確定刪除這筆紀錄？'))break;jarTxnRef(el.dataset.jid,id).delete().catch(()=>toast('刪除失敗'));closeSheet();render();toast('已刪除');break;
     case 'newjar':createJar();break;
@@ -1254,6 +1305,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('input',e=>{
   const t=e.target;
+  if(t.id==='emocustom'){const v=lastEmoji(t.value);if(t.value!==v)t.value=v;return}
   if(draft){
     if(t.id==='amt'){t.value=t.value.replace(/[^0-9]/g,'');draft.amount=t.value;updateHint();return}
     if(t.id==='note'){draft.note=t.value;return}
@@ -1290,7 +1342,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
   if(['bname','bpct','bamt','jamt','jname'].includes(t.dataset.edit))render();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){const b=document.getElementById('saveBtn');if(b&&!b.disabled)saveDraft()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();if(e.key==='Enter'&&e.target.id==='emocustom'){e.preventDefault();const v=lastEmoji(e.target.value);if(v)applyEmoji(v);else toast('請輸入一個 emoji');return}if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){const b=document.getElementById('saveBtn');if(b&&!b.disabled)saveDraft()}});
 const obs=new MutationObserver(()=>{if(draft&&document.getElementById('hint')&&!document.getElementById('hint').dataset.init){document.getElementById('hint').dataset.init=1;updateHint()}});
 obs.observe(document.getElementById('sheetBody'),{childList:true});
 
