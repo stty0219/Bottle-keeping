@@ -48,7 +48,7 @@ header.top h1{font-size:22px;margin:0;font-weight:700}
 
 /* jars */
 .shelf{display:flex;gap:14px;overflow-x:auto;padding:14px 2px 6px;scroll-snap-type:x mandatory}
-.jarcol{flex:1 0 96px;min-width:96px;scroll-snap-align:start;text-align:center;border:0;background:none;padding:0}
+.jarcol{display:block;flex:1 0 96px;min-width:96px;scroll-snap-align:start;text-align:center;cursor:pointer;-webkit-user-select:none;user-select:none}
 .jar{position:relative;height:168px;margin:0 8px;border:2.5px solid var(--ink);border-radius:16px 16px 30px 30px;overflow:hidden;background:var(--surface)}
 .jar::before{content:"";position:absolute;left:14%;right:14%;top:-2px;height:10px;border:2.5px solid var(--ink);border-top:0;border-radius:0 0 8px 8px;background:var(--bg);z-index:2}
 .jar.neg{border-color:var(--neg)}
@@ -283,7 +283,7 @@ const LSK='fenguan-ledger-v1';
 
 /* ---------- local storage ---------- */
 function loadLocal(){try{const r=localStorage.getItem(LSK);return r?JSON.parse(r):null}catch(e){return null}}
-function saveLocal(){planCache=null;try{localStorage.setItem(LSK,JSON.stringify(S))}catch(e){}}
+function saveLocal(){planCache=null;horizonCache=null;try{localStorage.setItem(LSK,JSON.stringify(S))}catch(e){}}
 function setSync(t){document.getElementById('sync').textContent=t}
 const clean=o=>JSON.parse(JSON.stringify(o));
 
@@ -482,7 +482,7 @@ function watchInvites(){
 /* contributions and transfers I make are mirrored into the shared jar so every member sees them */
 function desiredMirrors(jid){
   const me=myUid(),nm=myName(),key=SJ+jid,jp=(S.jarPlan||{})[jid],res={};
-  if(jp&&jp.from)for(let mk=jp.from;mk<=curMonth();mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);
+  if(jp&&jp.from)for(let mk=jp.from,hz=horizon();mk<=hz;mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);
     if(c)res['contrib_'+me+'_'+mk]={kind:'contrib',amount:c.amt,date:mk+'-01',note:'',by:me,byName:nm,src:nameOf(c.src),srcId:c.src}}
   for(const t of S.txns){
     if(t.type==='transfer'&&t.to===key)res['m_'+t.id]={kind:'in',amount:t.amount,date:t.date,note:t.note||'',by:me,byName:nm,src:nameOf(t.from)};
@@ -735,8 +735,8 @@ function targets(mk){return S.buckets.map(b=>({id:b.id,pct:+b.pct||0,amt:+b.amt|
 // my contribution plan for a shared jar: hist = [{m:'YYYY-MM', amt, src}] — each entry applies from its month on
 function defaultSrc(){const b=S.buckets.find(b=>/日常/.test(b.name))||S.buckets.find(b=>!isRemainder(b))||S.buckets[0];return b?b.id:null}
 function jarEff(jp,mk){if(!jp||!jp.hist)return null;let e=null;for(const x of jp.hist)if(x.m<=mk)e=x;return e}
-function jarContrib(jp,mk){ // {amt,src} actually moved in month mk (never beyond the current month)
-  if(!jarActive(jp,mk)||mk>curMonth())return null;
+function jarContrib(jp,mk){ // {amt,src} moved in month mk (up to the furthest month in view)
+  if(!jarActive(jp,mk)||mk>horizon())return null;
   const e=jarEff(jp,mk);if(!e||!(+e.amt>0)||!bucketById(e.src))return null;
   return {amt:+e.amt,src:e.src};
 }
@@ -790,6 +790,9 @@ function incAlloc(t){ // this income's share of its month
   return r;
 }
 const curMonth=()=>today().slice(0,7);
+// furthest month in view: the current month, or the latest month you've recorded something in
+let horizonCache=null;
+function horizon(){if(horizonCache)return horizonCache;return horizonCache=S.txns.reduce((a,t)=>t.date.slice(0,7)>a?t.date.slice(0,7):a,curMonth())}
 function shiftMonth(mk,d){const [y,m]=mk.split('-').map(Number);const dt=new Date(y,m-1+d,1);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')}
 const isRemainder=b=>!!b&&remainderBucket()&&remainderBucket().id===b.id;
 const carries=b=>b.carry!==false||isRemainder(b); // the designated jar always carries
@@ -854,19 +857,19 @@ function render(){
 
 function monthNav(){
   const [y,m]=listMonth.split('-').map(Number);
-  const latest=S.txns.reduce((a,t)=>t.date.slice(0,7)>a?t.date.slice(0,7):a,curMonth());
+  const latest=horizon();
   return `<div class="mnav"><button class="arr" data-action="mshift" data-d="-1" aria-label="上個月">‹</button>
     <div class="mlabel">${y} 年 ${m} 月<input type="month" id="hm" value="${listMonth}" aria-label="選擇月份"></div>
     <button class="arr" data-action="mshift" data-d="1" aria-label="下個月" ${listMonth>=latest?'disabled':''}>›</button></div>`;
 }
 function jarCol(id,name,color,s,sub,shared){
   const avail=Math.max(0,s.open)+s.monthIn,ratio=avail>0?Math.max(0,Math.min(1,s.bal/avail)):0;
-  return `<button class="jarcol" data-action="jump" data-bucket="${id}" aria-label="${esc(name)}，月底餘額 ${money(s.bal)}">
+  return `<div class="jarcol" role="button" tabindex="0" data-action="jump" data-bucket="${id}" aria-label="${esc(name)}，月底餘額 ${money(s.bal)}">
     <div class="jar ${s.bal<0?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${color}"></div>
     <div class="jarpct num">${avail>0?Math.round(ratio*100)+'%':'空'}</div></div>
     <div class="jarname">${esc(name)}${shared?'<span class="pill">共用</span>':''}</div>
     <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
-    <div class="jarsub">${sub}</div></button>`;
+    <div class="jarsub">${sub}</div></div>`;
 }
 // my share of a shared expense: split by the member count when it was recorded
 function myShare(t){const n=t.split||((Cloud.jars[t.jid]||{}).members||[]).length||1;return Math.round(t.amount/n)}
@@ -1664,7 +1667,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
   if(['bname','bpct','bamt','jamt','jname'].includes(t.dataset.edit))render();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();if(e.key==='Enter'&&e.target.id==='lq'){e.preventDefault();e.target.blur();return}if(e.key==='Enter'&&e.target.id==='emocustom'){e.preventDefault();const v=lastEmoji(e.target.value);if(v)applyEmoji(v);else toast('請輸入一個 emoji');return}if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){if(draft.ok&&!hasOp(draft.expr||''))saveDraft();return}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][data-action]')){e.preventDefault();e.target.click();return}if(e.key==='Enter'&&e.target.id==='lq'){e.preventDefault();e.target.blur();return}if(e.key==='Enter'&&e.target.id==='emocustom'){e.preventDefault();const v=lastEmoji(e.target.value);if(v)applyEmoji(v);else toast('請輸入一個 emoji');return}if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){if(draft.ok&&!hasOp(draft.expr||''))saveDraft();return}
   // physical keyboard on the calculator
   if(draft&&document.getElementById('kp')&&!/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)){
     const map={'+':'+','-':'−','*':'×','x':'×','/':'÷','.':'.','Backspace':'del','Enter':'go','=':'go','Delete':'AC'};
