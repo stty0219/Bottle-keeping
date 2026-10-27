@@ -1,0 +1,58 @@
+# ============================================================
+# 分罐記帳 (Bottle-keeping) — .gitignore
+# 這個 repo 同時是 GitHub Pages 的網站根目錄：
+# 被 push 上去的檔案，任何人都能用網址直接讀取。
+# ============================================================
+
+# ---------- 個人財務資料（最重要） ----------
+# App 匯出的備份與 CSV，裡面是你的真實記帳紀錄
+分罐記帳備份-*.json
+分罐記帳-*.csv
+*.backup.json
+exports/
+backups/
+
+# ---------- 下載的更新包、本機備份 ----------
+*.zip
+*.bak
+*.orig
+index.v*.html
+*~
+
+# ---------- 作業系統產生的檔案 ----------
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+# ---------- 編輯器設定 ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---------- 環境變數與金鑰（目前沒有用到，預防用） ----------
+.env
+.env.*
+*.pem
+*.key
+serviceAccount*.json
+*-firebase-adminsdk-*.json
+
+# ---------- Firebase CLI（如果之後有用 firebase 指令） ----------
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# ---------- Node 工具（如果之後有加建置流程或測試） ----------
+node_modules/
+npm-debug.log*
+*.log
+
+# ------------------------------------------------------------
+# 注意：以下檔案「要」push，不要加進來
+#   firebase-config.js   網站執行時需要；裡面是公開的專案識別資訊，不是密碼
+#   firestore.rules      安全規則的版本紀錄，不是機密
+#   index.html / sw.js / manifest.webmanifest / *.png
+# ------------------------------------------------------------
