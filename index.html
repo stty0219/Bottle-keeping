@@ -48,7 +48,7 @@ header.top h1{font-size:22px;margin:0;font-weight:700}
 
 /* jars */
 .shelf{display:flex;gap:14px;overflow-x:auto;padding:14px 2px 6px;scroll-snap-type:x mandatory}
-.jarcol{flex:1 0 96px;min-width:96px;scroll-snap-align:start;text-align:center;border:0;background:none;padding:0;display:flex;flex-direction:column;justify-content:flex-start}
+.jarcol{flex:1 0 96px;min-width:96px;scroll-snap-align:start;text-align:center;border:0;background:none;padding:0}
 .jar{position:relative;height:168px;margin:0 8px;border:2.5px solid var(--ink);border-radius:16px 16px 30px 30px;overflow:hidden;background:var(--surface)}
 .jar::before{content:"";position:absolute;left:14%;right:14%;top:-2px;height:10px;border:2.5px solid var(--ink);border-top:0;border-radius:0 0 8px 8px;background:var(--bg);z-index:2}
 .jar.neg{border-color:var(--neg)}
@@ -74,6 +74,8 @@ h2{font-size:15px;margin:26px 0 10px;font-weight:700}
 /* list */
 .txs{list-style:none;margin:0;padding:0}
 .day{font-size:13px;color:var(--muted);margin:18px 0 4px;display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.tx.sys{cursor:default}
+.tx.sys .t1{color:var(--muted)}
 .day .dsum{font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .tx{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left}
 .tx .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--chip);font-size:19px;flex:none}
@@ -811,7 +813,7 @@ function stats(excludeId,month){
   const rem=remainderBucket();
   const months=new Set([month]);for(const id in per)for(const mk in per[id])months.add(mk);
   const bal={},out={};S.buckets.forEach(b=>bal[b.id]=0);
-  let lastSweep=0;
+  let lastSweep=0,lastParts=[],lastMk=null;
   for(const mk of [...months].sort()){
     const isTarget=mk===month;
     for(const b of S.buckets){
@@ -820,12 +822,12 @@ function stats(excludeId,month){
       bal[b.id]+=cur.i-cur.o;
     }
     if(isTarget)break;
-    let sweep=0;
-    for(const b of S.buckets){if(!carries(b)){sweep+=bal[b.id];bal[b.id]=0}}
+    let sweep=0;const parts=[];
+    for(const b of S.buckets){if(!carries(b)){if(bal[b.id])parts.push({id:b.id,amount:bal[b.id]});sweep+=bal[b.id];bal[b.id]=0}}
     if(rem)bal[rem.id]+=sweep;
-    lastSweep=sweep;
+    lastSweep=sweep;lastParts=parts;lastMk=mk;
   }
-  if(rem&&out[rem.id])out[rem.id].sweep=lastSweep;
+  if(rem&&out[rem.id]){out[rem.id].sweep=lastSweep;out[rem.id].sweepParts=lastParts;out[rem.id].sweepMonth=lastMk}
   return out;
 }
 
@@ -911,10 +913,10 @@ function homeView(){
   const st=stats(null,listMonth);
   const jars=S.buckets.map(b=>{
     const s=st[b.id];
-    const sub=!carries(b)?'每月歸零':s.sweep?`上月結轉 ${money(s.open)}<br>含歸零罐結算 ${s.sweep<0?'−':'+'}${money(Math.abs(s.sweep))}`:(s.open?`上月結轉 ${money(s.open)}`:'會結轉');
+    const sub=carries(b)?'會結轉':'每月歸零';
     return jarCol(b.id,b.name,b.color,s,sub,false)}).join('');
   const shared=jarsList();
-  const sjars=shared.map(j=>{const s=jarStats(j.id,listMonth);return jarCol(SJ+j.id,j.name,j.color,s,`${(j.members||[]).length} 人共用`+(s.open?`<br>上月結轉 ${money(s.open)}`:''),true)}).join('');
+  const sjars=shared.map(j=>{const s=jarStats(j.id,listMonth);return jarCol(SJ+j.id,j.name,j.color,s,`${(j.members||[]).length} 人共用`,true)}).join('');
   const total=S.buckets.reduce((a,b)=>a+st[b.id].bal,0);
   const monthRows=S.buckets.map(b=>monthRow(b.name,b.color,st[b.id],false)).join('')+shared.map(j=>monthRow(j.name,j.color,jarStats(j.id,listMonth),true,j.id)).join('');
   const own=S.txns.filter(t=>t.type==='expense'&&t.date.slice(0,7)===listMonth).reduce((a,t)=>a+t.amount,0),sm=sharedMonth(listMonth);
@@ -929,7 +931,36 @@ function homeView(){
   <h2>這個月各罐</h2><div class="month-row">${monthRows}</div>
   <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(rowOf).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
 }
-const rowOf=t=>t.jid?sharedRow(t):txRow(t);
+const rowOf=t=>t.sys?sysRow(t):t.jid?sharedRow(t):txRow(t);
+// carry-over and month-end settlement, shown on the 1st; display only (never counted in totals)
+function sysItems(month,filter){
+  const st=stats(null,month),rows=[],date=month+'-01',prev=shiftMonth(month,-1);
+  const mlabel=mk=>mk===prev?'上月':(+mk.slice(5))+'月';
+  const want=id=>filter==='all'||filter===id;
+  const rem=remainderBucket();
+  for(const b of S.buckets){
+    const s=st[b.id];if(!s||!want(b.id))continue;
+    if(carries(b)){
+      const own=s.open-(rem&&rem.id===b.id?(s.sweep||0):0);
+      if(own)rows.push({sys:true,id:'sys_c_'+b.id,date,ts:-1,amount:own,color:b.color,jar:b.name,label:own>0?'上月結轉':'上月超支'});
+    }
+    if(rem&&rem.id===b.id)for(const p of (s.sweepParts||[])){
+      const src=bucketById(p.id);if(!src)continue;
+      rows.push({sys:true,id:'sys_s_'+p.id,date,ts:-2,amount:p.amount,color:b.color,jar:b.name,label:mlabel(s.sweepMonth||prev)+src.name+(p.amount>0?'剩餘':'超支')});
+    }
+  }
+  for(const j of jarsList()){
+    if(!want(SJ+j.id))continue;
+    const o=jarStats(j.id,month).open;
+    if(o)rows.push({sys:true,id:'sys_j_'+j.id,date,ts:-1,amount:o,color:j.color,jar:j.name+'（共用）',label:o>0?'上月結轉':'上月超支'});
+  }
+  return rows;
+}
+function sysRow(t){
+  const pos=t.amount>0;
+  return `<li><div class="tx sys" aria-label="${esc(t.label)} ${money(t.amount)}"><span class="ic">${t.id.startsWith('sys_s_')?(pos?'🪙':'⚠️'):(pos?'↩️':'⚠️')}</span><span class="mid"><div class="t1">${esc(t.label)}</div>
+    <div class="t2"><span class="dot" style="background:${t.color}"></span>${esc(t.jar)}・自動結算，不計入收支</div></span><span class="amt num ${pos?'in':''}">${pos?'+':'−'}${money(Math.abs(t.amount))}</span></div></li>`;
+}
 const delAct=ref=>`<div class="del-act"><button data-action="swdel" data-ref="${esc(ref)}" tabindex="-1">刪除</button></div>`;
 function sharedRow(t,noSwipe){
   const j=Cloud.jars[t.jid]||{};const me=myUid();
@@ -1062,6 +1093,7 @@ function listResultsHtml(){
   const catOf=t=>t.jid?(t.kind==='expense'?(t.catKey||t.catName||'?'):null):(t.type==='expense'?(t.catId||'?'):null);
   let shown=listCat?items.filter(t=>catOf(t)===listCat):items;
   if(q)shown=shown.filter(t=>noteMatch(t,terms));
+  else if(!listCat)shown=shown.concat(sysItems(listMonth,listBucket)).sort(sortTx);
   let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,toJar=0;
   for(const t of items){
     if(t.jid){
