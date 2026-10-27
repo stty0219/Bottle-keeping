@@ -238,6 +238,7 @@ li.swipe .tx{position:relative;z-index:1;background:var(--bg);transition:transfo
 .acct .btns button{flex:1 1 120px}
 .gbtn{background:var(--ink);color:var(--bg);border:0;border-radius:12px;padding:11px 14px;font-weight:600}
 .or{font-size:12px;color:var(--muted);text-align:center}
+.ver{margin:36px 0 0;text-align:center;font-size:12px;color:var(--muted);letter-spacing:.02em}
 </style>
 </head>
 <body>
@@ -259,6 +260,8 @@ li.swipe .tx{position:relative;z-index:1;background:var(--bg);transition:transfo
 <div class="toast" id="toast" role="status"></div>
 
 <script>
+// ===== App version: change only this line when releasing (sw.js picks it up automatically) =====
+const APP_VERSION='v19';
 const PALETTE=['#1F7A80','#D29A17','#8A4F7D','#3D6FB6','#5C8A3A','#C25B3A','#6B6F7A'];
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -699,7 +702,7 @@ function init(){
   render();
   syncStatus();
   cloudInit();
-  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js?v='+encodeURIComponent(APP_VERSION)).catch(()=>{})}
 }
 function exportData(){
   const {ledgerId,ledgerOwner,ledgerName,...plain}=S;const blob=new Blob([JSON.stringify(plain,null,2)],{type:'application/json'});
@@ -1189,7 +1192,8 @@ function settingsView(){
   <h2>動態效果</h2>
   <label class="f">畫面的動畫與過場效果<select data-edit="motion">
     ${[['standard','標準'],['reduce','減少'],['off','關閉']].map(([v,l])=>`<option value="${v}" ${motionPref()===v?'selected':''}>${l}</option>`).join('')}</select></label>
-  <p class="note">減少：保留表單滑出等必要的過場，關閉裝飾性的動畫。關閉：所有動畫都會關閉。這個設定只套用在這台裝置。</p>`;
+  <p class="note">減少：保留表單滑出等必要的過場，關閉裝飾性的動畫。關閉：所有動畫都會關閉。這個設定只套用在這台裝置。</p>
+  <p class="ver">Bottle-keeping ${esc(APP_VERSION)}</p>`;
 }
 
 /* ---------- sheet ---------- */
