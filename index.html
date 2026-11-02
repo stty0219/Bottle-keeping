@@ -75,6 +75,17 @@ h2{font-size:15px;margin:26px 0 10px;font-weight:700}
 .txs{list-style:none;margin:0;padding:0}
 .day{font-size:13px;color:var(--muted);margin:18px 0 4px;display:flex;justify-content:space-between;align-items:baseline;gap:12px}
 .tx.sys{cursor:default}
+.settle{margin:16px 0 0;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.settle-h{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;background:none;border:0;font-size:14px;text-align:left}
+.settle-h .lbl{font-weight:700}
+.settle-h .net{color:var(--muted)}
+.settle-h .net b{color:var(--ink);font-size:16px}
+.settle-h .net b.neg{color:var(--neg)}
+.settle-h .chev{display:inline-block;margin-left:6px;transition:transform .2s;color:var(--muted)}
+.settle.open .settle-h .chev{transform:rotate(90deg)}
+.settle-list{display:none;padding:0 14px 2px;border-top:1px solid var(--line)}
+.settle.open .settle-list{display:block}
+.settle-list li:last-child .tx{border-bottom:0}
 .tx.sys .t1{color:var(--muted)}
 .day .dsum{font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .tx{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left}
@@ -261,7 +272,7 @@ li.swipe .tx{position:relative;z-index:1;background:var(--bg);transition:transfo
 
 <script>
 // ===== App version: change only this line when releasing (sw.js picks it up automatically) =====
-const APP_VERSION='v19';
+const APP_VERSION='v20';
 const PALETTE=['#1F7A80','#D29A17','#8A4F7D','#3D6FB6','#5C8A3A','#C25B3A','#6B6F7A'];
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -958,14 +969,24 @@ function sysItems(month,filter){
   for(const j of jarsList()){
     if(!want(SJ+j.id))continue;
     const o=jarStats(j.id,month).open;
-    if(o)rows.push({sys:true,id:'sys_j_'+j.id,date,ts:-1,amount:o,color:j.color,jar:j.name+'（共用）',label:o>0?'上月結轉':'上月超支'});
+    if(o)rows.push({sys:true,shared:true,id:'sys_j_'+j.id,date,ts:-1,amount:o,color:j.color,jar:j.name+'（共用）',label:o>0?'上月結轉':'上月超支'});
   }
   return rows;
+}
+// 月初結算: collapsed to one net line, expand for the individual carry-overs and settlements
+let settleOpen=false;
+function settleHtml(rows){
+  if(!rows.length)return '';
+  const net=rows.filter(r=>listBucket!=='all'||!r.shared).reduce((a,r)=>a+r.amount,0);
+  const sign=net>0?'+':net<0?'−':'';
+  return `<div class="settle ${settleOpen?'open':''}"><button class="settle-h" data-action="settle" aria-expanded="${settleOpen}">
+      <span class="lbl">月初結算</span><span class="net num">淨額 <b class="${net<0?'neg':''}">${sign}${money(Math.abs(net)).replace('−','')}</b><span class="chev">›</span></span></button>
+    <ul class="txs settle-list">${rows.map(sysRow).join('')}</ul></div>`;
 }
 function sysRow(t){
   const pos=t.amount>0;
   return `<li><div class="tx sys" aria-label="${esc(t.label)} ${money(t.amount)}"><span class="ic">${t.id.startsWith('sys_s_')?(pos?'🪙':'⚠️'):(pos?'↩️':'⚠️')}</span><span class="mid"><div class="t1">${esc(t.label)}</div>
-    <div class="t2"><span class="dot" style="background:${t.color}"></span>${esc(t.jar)}・自動結算，不計入收支</div></span><span class="amt num ${pos?'in':''}">${pos?'+':'−'}${money(Math.abs(t.amount))}</span></div></li>`;
+    <div class="t2"><span class="dot" style="background:${t.color}"></span>${esc(t.jar)}</div></span><span class="amt num ${pos?'in':''}">${pos?'+':'−'}${money(Math.abs(t.amount))}</span></div></li>`;
 }
 const delAct=ref=>`<div class="del-act"><button data-action="swdel" data-ref="${esc(ref)}" tabindex="-1">刪除</button></div>`;
 function sharedRow(t,noSwipe){
@@ -1099,7 +1120,7 @@ function listResultsHtml(){
   const catOf=t=>t.jid?(t.kind==='expense'?(t.catKey||t.catName||'?'):null):(t.type==='expense'?(t.catId||'?'):null);
   let shown=listCat?items.filter(t=>catOf(t)===listCat):items;
   if(q)shown=shown.filter(t=>noteMatch(t,terms));
-  else if(!listCat)shown=shown.concat(sysItems(listMonth,listBucket)).sort(sortTx);
+  const sys=(!q&&!listCat)?sysItems(listMonth,listBucket):[];
   let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,toJar=0;
   for(const t of items){
     if(t.jid){
@@ -1131,7 +1152,7 @@ function listResultsHtml(){
       ?`共用支出 <b>${money(shOut)}</b>（你的份額 ${money(shMine)}）<br>撥入 <b>${money(sumIn)}</b>`
       :`個人支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${toJar?`<br>撥到共用罐 ${money(toJar)}`:''}${shOut?`<br>共用支出 ${money(shOut)}（你的份額 <b>${money(shMine)}</b>）`:''}`}</span></div>`;
   const empty=q?`<div class="empty">${all?'所有月份':'這個月'}沒有符合「${esc(listQuery.trim())}」的紀錄。${all?'':'<br>可以切換到「所有月份」試試看。'}</div>`:'<div class="empty">這個月還沒有紀錄。</div>';
-  return `${totalLine}
+  return `${settleHtml(sys)}${totalLine}
     ${q?'':pieHtml()}
     ${listCat?`<button class="catfilter" data-action="pie" data-key="${esc(listCat)}">只看：${esc(catLabel)}　✕</button>`:''}
     ${html||empty}`;
@@ -1586,6 +1607,7 @@ document.addEventListener('click',e=>{
     case 'tx':openTx(id);break;
     case 'stx':openShared(el.dataset.jid,id);break;
     case 'swdel':swipeDelete(el.dataset.ref);break;
+    case 'settle':{settleOpen=!settleOpen;const s=el.closest('.settle');s.classList.toggle('open',settleOpen);el.setAttribute('aria-expanded',settleOpen);break}
     case 'qclear':{listQuery='';const i=document.getElementById('lq');if(i){i.value='';i.focus()}document.getElementById('sbox').classList.add('empty');refreshResults();break}
     case 'qall':listAllMonths=!listAllMonths;el.setAttribute('aria-pressed',listAllMonths);refreshResults();break;
     case 'emopick':openEmoji(id,el.dataset.jid);break;
