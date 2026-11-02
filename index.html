@@ -75,6 +75,25 @@ h2{font-size:15px;margin:26px 0 10px;font-weight:700}
 .txs{list-style:none;margin:0;padding:0}
 .day{font-size:13px;color:var(--muted);margin:18px 0 4px;display:flex;justify-content:space-between;align-items:baseline;gap:12px}
 .tx.sys{cursor:default}
+.ver{cursor:default;-webkit-user-select:none;user-select:none}
+.devlink{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:28px;padding:13px 14px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface);font-weight:600}
+.dev .sum-top{justify-content:space-between;align-items:center;gap:10px}
+.dev .back{background:none;border:0;font-size:15px;padding:8px 0;color:var(--ink)}
+.dev h1{font-size:20px;margin:6px 0 14px}
+.devitem{display:flex;justify-content:space-between;align-items:center;width:100%;padding:15px 14px;margin-bottom:10px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);text-align:left}
+.devitem .t{font-weight:600}
+.devitem .s{display:block;font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
+.rule{display:grid;grid-template-columns:auto 1fr 92px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.rule .gd{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-family:var(--num);font-weight:700;font-size:15px}
+.gd.g-S{background:#D4A017}.gd.g-A{background:#2F7D4F}.gd.g-B{background:#3D6FB6}.gd.g-C{background:#C2412D}
+.rule .tx2{font-size:14px}
+.rule .tx2 small{display:block;font-size:12px;color:var(--muted)}
+.unit{position:relative}
+.unit input{padding-right:30px;text-align:right}
+.unit span{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+.cgrp{margin-top:18px}
+.cgrp .hd{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:6px}
+.crow{display:grid;grid-template-columns:1fr 36px;gap:6px;align-items:center;margin-bottom:6px}
 /* month summary (月結算) */
 .sumbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:10px 0 0;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);font-weight:600;font-size:15px}
 .sum{position:fixed;inset:0;z-index:25;background:var(--bg);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
@@ -319,7 +338,7 @@ li.swipe .tx{position:relative;z-index:1;background:var(--bg);transition:transfo
 
 <script>
 // ===== App version: change only this line when releasing (sw.js picks it up automatically) =====
-const APP_VERSION='v21';
+const APP_VERSION='v22';
 const PALETTE=['#1F7A80','#D29A17','#8A4F7D','#3D6FB6','#5C8A3A','#C25B3A','#6B6F7A'];
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -402,7 +421,7 @@ async function cloudConnect(){
     const q=await col.where('members','array-contains',u.uid).get();
     if(q.empty){
       const ref=col.doc();
-      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),
+      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules||null,gradeComments:S.gradeComments||null,
         createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
       await writeTxns(ref,S.txns);
       lid=ref.id;toast('已把這台裝置的資料上傳到雲端');
@@ -430,7 +449,7 @@ function subscribe(ref){
     if(!snap.exists){fail({code:'permission-denied'});return}
     if(snap.metadata.hasPendingWrites)return;
     const d=snap.data();
-    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.jarPlan=d.jarPlan||{};S.ledgerName=d.name||'我的帳本';
+    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.jarPlan=d.jarPlan||{};S.gradeRules=d.gradeRules||null;S.gradeComments=d.gradeComments||null;S.ledgerName=d.name||'我的帳本';
     const mig=migrateJarPlan();saveLocal();safeRender();if(mig)persist();
     if(!Cloud.ledgerLoaded){Cloud.ledgerLoaded=true;startJars()}
     scheduleMirror();
@@ -458,7 +477,7 @@ function persist(){ // buckets & categories
   if(!cloudOn())return;
   clearTimeout(Cloud.metaTimer);
   Cloud.metaTimer=setTimeout(()=>{
-    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules?clean(S.gradeRules):null,gradeComments:S.gradeComments?clean(S.gradeComments):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
       .catch(e=>{Cloud.err='設定沒有存到雲端：'+(e.message||e.code);renderIfSettings()});
     syncStatus();scheduleMirror();
   },600);
@@ -988,7 +1007,7 @@ function homeView(){
   const isNow=listMonth===curMonth();
   const any=S.txns.length||shared.length;
   const empty=!any?`<div class="empty">先記一筆收入，錢會依計畫分進各個罐子。</div>`:'';
-  return `${cloudOn()?invitesHtml():''}${monthNav()}<button class="sumbtn" data-action="summary">📊 查看 ${+listMonth.slice(5)} 月結算</button><div class="shelf">${jars}${sjars}</div>
+  return `${cloudOn()?invitesHtml():''}${monthNav()}${listMonth<curMonth()?`<button class="sumbtn" data-action="summary">📊 查看 ${+listMonth.slice(5)} 月結算</button>`:''}<div class="shelf">${jars}${sjars}</div>
   <div class="total"><span>${isNow?'目前':'月底'}${shared.length?'我的罐子':'所有罐子'}合計</span><b class="num ${total<0?'neg':''}">${money(total)}</b></div>
   ${empty}
   ${any?`<div class="total" style="margin-top:0;border-top:0"><span>這個月支出</span><span class="num"><b>${money(own+sm.share)}</b>${shared.length?`<br><span class="note">個人 ${money(own)}＋共用份額 ${money(sm.share)}</span>`:''}</span></div>
@@ -1261,7 +1280,8 @@ function settingsView(){
   <label class="f">畫面的動畫與過場效果<select data-edit="motion">
     ${[['standard','標準'],['reduce','減少'],['off','關閉']].map(([v,l])=>`<option value="${v}" ${motionPref()===v?'selected':''}>${l}</option>`).join('')}</select></label>
   <p class="note">減少：保留表單滑出等必要的過場，關閉裝飾性的動畫。關閉：所有動畫都會關閉。這個設定只套用在這台裝置。</p>
-  <p class="ver">Bottle-keeping ${esc(APP_VERSION)}</p>`;
+  ${devOn()?'<button class="devlink" data-action="devopen"><span>🛠 開發者選項</span><span>›</span></button>':''}
+  <p class="ver" data-action="vertap">Bottle-keeping ${esc(APP_VERSION)}</p>`;
 }
 
 /* ---------- month summary (月結算) ---------- */
@@ -1269,6 +1289,7 @@ function settingsView(){
 const GRADE_DEFAULT={sRate:0.30,aRate:0.10,bMaxOver:1};
 const gradeRules=()=>Object.assign({},GRADE_DEFAULT,S.gradeRules||{});
 const GRADE_ORDER='CBAS';
+function commentsOf(g){const l=((S.gradeComments||{})[g]||[]).map(s=>String(s).trim()).filter(Boolean);return l.length?l:COMMENTS[g]}
 const COMMENTS={
   S:['這個月很省喔！你是省錢達人 🏆','每個罐子都守住了，太厲害了！✨','存錢功力滿分，繼續保持！💎'],
   A:['表現不錯！預算控制得很穩 👍','離省錢達人只差一步了！','穩穩的，這個月過得很踏實 🌱'],
@@ -1302,7 +1323,7 @@ function gradeOf(d){
   }
   return d.over===0?'A':d.over<=r.bMaxOver?'B':'C';
 }
-function commentFor(g,mk){const l=COMMENTS[g];let h=0;for(const c of mk)h=(h*31+c.charCodeAt(0))>>>0;return l[h%l.length]}
+function commentFor(g,mk){const l=commentsOf(g);let h=0;for(const c of mk)h=(h*31+c.charCodeAt(0))>>>0;return l[h%l.length]}
 const pct=(a,b)=>b?Math.round(a/b*100):0;
 function delta(cur,prev,kind){ // kind: 'spend' (more = bad) | 'save' (more = good) | 'inc'
   const d=cur-prev;if(!d)return '<span class="flat">和上月一樣</span>';
@@ -1315,7 +1336,7 @@ const countSpan=(v,cls)=>`<span class="num ${cls||''}" data-count="${Math.round(
 function summaryHtml(mk){
   const d=monthData(mk),p=monthData(shiftMonth(mk,-1));
   const [y,m]=mk.split('-').map(Number);
-  const live=mk>=curMonth();
+  const live=false; // the summary is only offered for finished months
   let i=0;const A=()=>`anim" style="--i:${i++}`;
   if(!d.has)return `<div class="sum-head"><div class="sum-title">${y} 年 ${m} 月結算</div></div><div class="empty">這個月還沒有收入或支出紀錄。</div>`;
   const g=gradeOf(d),pg=p.has?gradeOf(p):null;
@@ -1384,6 +1405,57 @@ function countUp(root){
     requestAnimationFrame(step);
   });
 }
+
+/* ---------- developer mode ---------- */
+const DEV_KEY='fenguan-dev';
+function devOn(){try{return localStorage.getItem(DEV_KEY)==='1'}catch(e){return false}}
+let verTaps=0,verTimer=null;
+function verTap(){
+  verTaps++;clearTimeout(verTimer);verTimer=setTimeout(()=>verTaps=0,1500);
+  const left=7-verTaps,on=devOn();
+  if(left<=0){verTaps=0;try{localStorage.setItem(DEV_KEY,on?'0':'1')}catch(e){}render();toast(on?'已關閉開發者模式':'已開啟開發者模式');return}
+  if(left<=3)toast(on?`再點 ${left} 下關閉開發者模式`:`再點 ${left} 下開啟開發者模式`);
+}
+let devView='home';
+function devHtml(){
+  if(devView==='grade'){
+    const r=gradeRules(),pc=v=>Math.round(v*100);
+    const rule=(g,label,sub,key,val,unit,max)=>`<div class="rule"><span class="gd g-${g}">${g}</span><span class="tx2">${label}<small>${sub}</small></span>
+      <label class="unit"><input type="number" inputmode="numeric" min="0" max="${max}" step="1" value="${val}" data-edit="gr" data-k="${key}" aria-label="${label}"><span>${unit}</span></label></div>`;
+    const grp=g=>{const l=(S.gradeComments&&S.gradeComments[g])||COMMENTS[g];
+      return `<div class="cgrp"><div class="hd"><span class="gd g-${g}" style="width:24px;height:24px;font-size:13px;border-radius:50%;display:grid;place-items:center;color:#fff">${g}</span>${g} 的評語</div>
+      ${l.map((c,i)=>`<div class="crow"><input type="text" value="${esc(c)}" data-edit="gc" data-g="${g}" data-i="${i}" aria-label="${g} 評語 ${i+1}"><button class="icon-btn" data-action="gcdel" data-g="${g}" data-i="${i}" aria-label="刪除評語">✕</button></div>`).join('')}
+      <button class="ghost" data-action="gcadd" data-g="${g}">新增評語</button></div>`};
+    return `<div class="sum-top"><button class="back" data-action="devback">‹ 開發者選項</button><button class="sum-x" data-action="devclose" aria-label="關閉">✕</button></div>
+      <h1>評等與評語</h1>
+      <h3 style="font-size:15px;margin:0 0 4px">評等條件</h3>
+      <p class="note" style="margin:0 0 6px">結餘率 =（收入 − 支出）÷ 收入；支出含共用份額，不含撥到共用罐的錢。只看你自己的罐子。</p>
+      ${rule('S','結餘率至少','且沒有罐子超支','sRate',pc(r.sRate),'%',100)}
+      ${rule('A','結餘率至少','且沒有罐子超支','aRate',pc(r.aRate),'%',100)}
+      ${rule('B','最多幾個罐子超支','且支出沒有超過收入','bMaxOver',r.bMaxOver,'個',20)}
+      <div class="rule"><span class="gd g-C">C</span><span class="tx2">其他情況<small>超支的罐子更多，或支出超過收入</small></span><span></span></div>
+      <p class="note" style="margin:8px 0 0">沒有記收入的月份：沒有超支是 A，在 B 的超支上限內是 B，否則是 C。</p>
+      <button class="ghost" style="margin-top:12px" data-action="grreset">恢復預設條件</button>
+      <h3 style="font-size:15px;margin:28px 0 0">評語</h3>
+      <p class="note" style="margin:4px 0 0">每個月會從該評等的評語中固定挑一句；空白的評語會被略過。</p>
+      ${['S','A','B','C'].map(grp).join('')}
+      <button class="ghost danger" style="margin-top:18px" data-action="gcreset">恢復預設評語</button>`;
+  }
+  return `<div class="sum-top"><span></span><button class="sum-x" data-action="devclose" aria-label="關閉">✕</button></div>
+    <h1>開發者選項</h1>
+    <button class="devitem" data-action="devgo" data-v="grade"><span><span class="t">評等與評語</span><span class="s">調整月結算的評等條件，以及各評等的評語</span></span><span>›</span></button>
+    <button class="ghost" style="width:100%;margin-top:18px" data-action="devoff">關閉開發者模式</button>
+    <p class="note" style="margin-top:10px">也可以在設定頁連點版本號 7 次來關閉。</p>`;
+}
+function openDev(v){
+  devView=v||'home';
+  let el=document.getElementById('dev');
+  if(!el){el=document.createElement('div');el.className='sum dev';el.id='dev';el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');el.setAttribute('aria-label','開發者選項');document.body.appendChild(el);lockScroll()}
+  el.innerHTML=`<div class="sum-in">${devHtml()}</div>`;el.scrollTop=0;
+}
+function closeDev(){const el=document.getElementById('dev');if(el){el.remove();unlockScroll()}}
+function devRender(){const el=document.getElementById('dev');if(el){const y=el.scrollTop;el.innerHTML=`<div class="sum-in">${devHtml()}</div>`;el.scrollTop=y}}
+function ensureComments(){S.gradeComments=S.gradeComments||{};for(const g of 'SABC')if(!S.gradeComments[g])S.gradeComments[g]=COMMENTS[g].slice()}
 
 /* ---------- sheet ---------- */
 let lockY=null;
@@ -1775,6 +1847,16 @@ document.addEventListener('click',e=>{
     case 'tx':openTx(id);break;
     case 'stx':openShared(el.dataset.jid,id);break;
     case 'swdel':swipeDelete(el.dataset.ref);break;
+    case 'vertap':verTap();break;
+    case 'devopen':openDev('home');break;
+    case 'devgo':devView=el.dataset.v;devRender();document.getElementById('dev').scrollTop=0;break;
+    case 'devback':devView='home';devRender();break;
+    case 'devclose':closeDev();break;
+    case 'devoff':try{localStorage.setItem(DEV_KEY,'0')}catch(_){}closeDev();render();toast('已關閉開發者模式');break;
+    case 'grreset':S.gradeRules=null;persist();devRender();toast('已恢復預設條件');break;
+    case 'gcadd':ensureComments();S.gradeComments[el.dataset.g].push('');persist();devRender();{const ins=document.querySelectorAll(`#dev [data-edit=gc][data-g="${el.dataset.g}"]`);if(ins.length)ins[ins.length-1].focus()}break;
+    case 'gcdel':{ensureComments();const l=S.gradeComments[el.dataset.g];if(l.length<=1){toast('每個評等至少要保留一句評語');break}l.splice(+el.dataset.i,1);persist();devRender();break}
+    case 'gcreset':if(!confirm('確定把所有評語恢復成預設？'))break;S.gradeComments=null;persist();devRender();toast('已恢復預設評語');break;
     case 'summary':openSummary(listMonth);break;
     case 'sumclose':closeSummary();break;
     case 'settle':{settleOpen=!settleOpen;const s=el.closest('.settle');s.classList.toggle('open',settleOpen);el.setAttribute('aria-expanded',settleOpen);break}
@@ -1826,6 +1908,7 @@ document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='lq'){listQuery=t.value;document.getElementById('sbox').classList.toggle('empty',!t.value);refreshResults();return}
   if(t.id==='emocustom'){const v=lastEmoji(t.value);if(t.value!==v)t.value=v;return}
+  if(t.dataset.edit==='gc'){ensureComments();S.gradeComments[t.dataset.g][+t.dataset.i]=t.value;persist();return}
   if(draft){
     if(t.id==='amt'){t.value=t.value.replace(/[^0-9]/g,'');draft.amount=t.value;updateHint();return}
     if(t.id==='note'){draft.note=t.value;return}
@@ -1858,12 +1941,19 @@ document.addEventListener('change',e=>{
     if(t.id==='to'){draft.to=t.value;updateHint();return}
   }
   if(t.dataset.edit==='cbucket'){catById(t.dataset.id).bucketId=t.value;persist();render()}
+  if(t.dataset.edit==='gr'){
+    const r=gradeRules(),k=t.dataset.k;let v=Math.max(0,parseInt(t.value)||0);
+    if(k==='bMaxOver')r.bMaxOver=Math.min(20,v);
+    else{v=Math.min(100,v)/100;r[k]=v;
+      if(k==='aRate'&&r.aRate>r.sRate){r.aRate=r.sRate;toast('A 的門檻不能高於 S，已調整為相同')}
+      if(k==='sRate'&&r.aRate>r.sRate){r.aRate=r.sRate;toast('A 的門檻已一併調低，不能高於 S')}}
+    S.gradeRules=r;persist();devRender();return}
   if(t.dataset.edit==='motion'){try{localStorage.setItem(MOTION_KEY,t.value)}catch(_){}applyMotion();stopPieSpin();toast('已更新動態效果');return}
   if(t.dataset.edit==='remainder'){S.remainderId=t.value;const b=bucketById(t.value);if(b&&b.carry===false){b.carry=true;toast(`「${b.name}」是指定罐子，已改為結轉`)}persist();render();return}
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
   if(['bname','bpct','bamt','jamt','jname'].includes(t.dataset.edit))render();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('summary')){closeSummary();return}closeSheet()}if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][data-action]')){e.preventDefault();e.target.click();return}if(e.key==='Enter'&&e.target.id==='lq'){e.preventDefault();e.target.blur();return}if(e.key==='Enter'&&e.target.id==='emocustom'){e.preventDefault();const v=lastEmoji(e.target.value);if(v)applyEmoji(v);else toast('請輸入一個 emoji');return}if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){if(draft.ok&&!hasOp(draft.expr||''))saveDraft();return}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('dev')){closeDev();return}if(document.getElementById('summary')){closeSummary();return}closeSheet()}if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][data-action]')){e.preventDefault();e.target.click();return}if(e.key==='Enter'&&e.target.id==='lq'){e.preventDefault();e.target.blur();return}if(e.key==='Enter'&&e.target.id==='emocustom'){e.preventDefault();const v=lastEmoji(e.target.value);if(v)applyEmoji(v);else toast('請輸入一個 emoji');return}if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){if(draft.ok&&!hasOp(draft.expr||''))saveDraft();return}
   // physical keyboard on the calculator
   if(draft&&document.getElementById('kp')&&!/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)){
     const map={'+':'+','-':'−','*':'×','x':'×','/':'÷','.':'.','Backspace':'del','Enter':'go','=':'go','Delete':'AC'};
