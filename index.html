@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="分罐記帳">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#E8EDF1;--surface:#F7F9FB;--ink:#16202B;--muted:#5F6E7C;--line:#CFD8E0;--neg:#C2412D;--chip:#DDE4EA;
@@ -83,64 +83,188 @@ h2{font-size:15px;margin:26px 0 10px;font-weight:700}
 .devitem{display:flex;justify-content:space-between;align-items:center;width:100%;padding:15px 14px;margin-bottom:10px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);text-align:left}
 .devitem .t{font-weight:600}
 .devitem .s{display:block;font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
-.rule{display:grid;grid-template-columns:auto 1fr 92px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
-.rule .gd{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-family:var(--num);font-weight:700;font-size:15px}
-.gd.g-S{background:#D4A017}.gd.g-A{background:#2F7D4F}.gd.g-B{background:#3D6FB6}.gd.g-C{background:#C2412D}
+.rule{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .rule .tx2{font-size:14px}
 .rule .tx2 small{display:block;font-size:12px;color:var(--muted)}
-.unit{position:relative}
-.unit input{padding-right:30px;text-align:right}
-.unit span{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+.unitw{display:flex;align-items:center;gap:6px}
+.unitw input{width:76px;text-align:right}
+.unitw .u{color:var(--muted);font-size:13px;min-width:1.4em}
+.gd{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-family:var(--num);font-weight:700;font-size:15px;flex:none}
+.gd.g-S{background:#D4A017}.gd.g-A{background:#2F7D4F}.gd.g-B{background:#3D6FB6}.gd.g-C{background:#C2412D}
 .cgrp{margin-top:18px}
 .cgrp .hd{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:6px}
+.cgrp .hd .gd{width:24px;height:24px;font-size:13px}
 .crow{display:grid;grid-template-columns:1fr 36px;gap:6px;align-items:center;margin-bottom:6px}
-/* month summary (月結算) */
+.trow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;margin-bottom:8px}
+.thcard{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;padding:10px;margin-bottom:10px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);text-align:left}
+.thcard.on{border-color:var(--ink)}
+.thcard .nm{font-weight:600}
+.thcard .ds{display:block;font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
+.thcard .ck{font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap}
+.tp{width:76px;height:76px;border-radius:12px;overflow:hidden;display:grid;place-items:center;background:var(--s-bg,var(--bg));color:var(--s-fg,var(--ink));border:1px solid var(--line)}
+.tp .tpz{transform:scale(.46);transform-origin:center}
+.tp *{animation:none!important}
+.tpbig{height:180px;border-radius:16px;display:grid;place-items:center;margin:4px 0 14px;background:var(--s-bg,var(--bg));color:var(--s-fg,var(--ink));border:1px solid var(--line);overflow:hidden}
+.tpbig *{animation:none!important}
+
+/* month summary (月結算) — shared layout; each theme sets the --s-* colors */
+.g-S{--gc:#D4A017}.g-A{--gc:#2F7D4F}.g-B{--gc:#3D6FB6}.g-C{--gc:#C2412D}
 .sumbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:10px 0 0;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);font-weight:600;font-size:15px}
-.sum{position:fixed;inset:0;z-index:25;background:var(--bg);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-.sum-in{max-width:560px;margin:0 auto;padding:calc(10px + env(safe-area-inset-top,0px)) 18px calc(40px + env(safe-area-inset-bottom,0px))}
-.sum-top{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:2;padding-top:4px}
-.sum-x{width:40px;height:40px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);font-size:16px}
+.sum{position:fixed;inset:0;z-index:25;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:var(--s-bg,var(--bg));color:var(--s-fg,var(--ink))}
+.sum-in{position:relative;max-width:560px;margin:0 auto;padding:calc(10px + env(safe-area-inset-top,0px)) 18px calc(40px + env(safe-area-inset-bottom,0px))}
+.sum-top{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:4;padding-top:4px}
+.sum-x{width:40px;height:40px;border-radius:12px;border:1.5px solid var(--s-line,var(--line));background:var(--s-card,var(--surface));color:var(--s-fg,var(--ink));font-size:16px}
+.sum .note,.sum .k,.sum .s,.sum .ds,.sum .sum-prev,.sum .kick{color:var(--s-muted,var(--muted))}
 .sum-head{text-align:center;padding:4px 0 8px}
-.sum-title{font-size:20px;font-weight:700}
-.sum-status{font-size:13px;color:var(--muted);margin-top:2px;min-height:1.2em}
-.grade{width:112px;height:112px;margin:18px auto 10px;border-radius:50%;display:grid;place-items:center;font-family:var(--num);font-size:64px;font-weight:700;color:#fff;box-shadow:0 10px 28px rgba(10,20,30,.22)}
-.grade.g-S{background:radial-gradient(circle at 30% 25%,#F6D365,#D4A017 60%,#A87C0B)}
-.grade.g-A{background:radial-gradient(circle at 30% 25%,#7FD3A0,#2F7D4F 65%)}
-.grade.g-B{background:radial-gradient(circle at 30% 25%,#8DB4E8,#3D6FB6 65%)}
-.grade.g-C{background:radial-gradient(circle at 30% 25%,#F0A08E,#C2412D 65%)}
-.grade.tent{opacity:.85;outline:3px dashed var(--line);outline-offset:6px}
-.sum-comment{font-size:17px;font-weight:600;margin-top:6px}
-.sum-prev{font-size:13px;color:var(--muted);margin-top:6px}
-.sum sec,.sum section{display:block;margin-top:26px}
+.kick{font-size:12px;letter-spacing:.12em}
+.sum-title{font-size:21px;font-weight:700}
+.badgew{display:flex;justify-content:center;margin:18px 0 10px}
+.gtitle{font-size:15px;font-weight:700;color:var(--gc)}
+.sum-comment{font-size:16px;font-weight:600;margin-top:6px}
+.sum-prev{font-size:13px;margin-top:6px}
+.sum section{display:block;margin-top:26px}
 .sum h3{font-size:15px;margin:0 0 10px}
-.cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.scard{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:12px 10px}
-.scard .k{font-size:12px;color:var(--muted)}
+.hero{font-family:var(--num);font-size:34px;font-weight:700;color:var(--s-good,#2F7D4F);line-height:1.15}
+.hero.neg{color:var(--s-bad,var(--neg))}
+.cards3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.cards2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.scard{background:var(--s-card,var(--surface));border:1.5px solid var(--s-line,var(--line));border-radius:14px;padding:12px 10px;min-width:0}
+.scard .k{font-size:12px}
 .scard .v{font-size:18px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .scard .d{font-size:11.5px;margin-top:4px;line-height:1.35}
-.up-bad,.dn-bad{color:var(--neg)}
-.up-good,.dn-good{color:#2F7D4F}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .up-good,:root:not([data-theme="light"]) .dn-good{color:#6FCB93}}
-.flat{color:var(--muted)}
-.rank{display:grid;grid-template-columns:22px 1fr auto;gap:4px 10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.rank .no{font-family:var(--num);font-weight:700;color:var(--muted);font-size:13px;text-align:center}
-.rank .nm{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rank .nm small{color:var(--muted);font-size:11px;margin-left:4px}
-.rank .am{font-size:14px;font-weight:600;text-align:right}
-.rank .am small{display:block;font-size:11px;color:var(--muted);font-weight:400}
-.rank .bar{grid-column:2/-1;height:6px}
-.jrow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.sum .bad{color:var(--s-bad,var(--neg))}
+.sum .good{color:var(--s-good,#2F7D4F)}
+.sum .flat{color:var(--s-muted,var(--muted))}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sum{--s-good:#6FCB93}}
+.rank{border-bottom:1px solid var(--s-line,var(--line))}
+.rankh{display:grid;grid-template-columns:26px minmax(0,1fr) auto 14px;gap:4px 10px;align-items:center;padding:9px 0;width:100%;background:none;border:0;color:inherit;text-align:left}
+.rankh .no{font-family:var(--num);font-weight:700;color:var(--s-muted,var(--muted));font-size:13px;text-align:center}
+.rankh .nm{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rankh .nm small{color:var(--s-muted,var(--muted));font-size:11px;margin-left:4px}
+.rankh .am{font-size:14px;font-weight:600;text-align:right}
+.rankh .am small{display:block;font-size:11px;color:var(--s-muted,var(--muted));font-weight:400}
+.rankh .cv{color:var(--s-muted,var(--muted));transition:transform .2s;font-size:13px}
+.rank.open .rankh .cv{transform:rotate(90deg)}
+.rankh .bar{grid-column:2/4;height:6px;background:var(--s-line,var(--chip))}
+.cdet{padding:0 0 10px 36px}
+.cdh{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--s-muted,var(--muted));margin-bottom:2px}
+.sortb{position:relative;display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;border:1px solid var(--s-line,var(--line));font-size:12px;color:var(--s-fg,var(--ink))}
+.sortb select{position:absolute;inset:0;opacity:0;width:100%;font-size:16px;cursor:pointer}
+.sortb svg{width:14px;height:14px}
+.cd{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:6px 0;border-top:1px dashed var(--s-line,var(--line));font-size:13px}
+.cd .dt{color:var(--s-muted,var(--muted));font-family:var(--num);font-size:12px}
+.cd .nt{min-width:0;overflow-wrap:anywhere}
+.cd .nt small{display:block;font-size:11px;color:var(--s-muted,var(--muted))}
+.cd .am{font-weight:600}
+.cdmore{display:block;width:100%;margin-top:4px;padding:8px;border:0;background:none;color:var(--s-muted,var(--muted));font-size:13px}
+.jrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--s-line,var(--line))}
 .jrow .nm{font-weight:600;font-size:14px}
 .jrow .st{font-size:13px;font-weight:600;text-align:right}
-.jrow .ds{font-size:12px;color:var(--muted)}
-.hl{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.jrow .ds{font-size:12px}
+.hl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .hl .scard .v{font-size:16px}
-.hl .scard .s{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sum .anim{opacity:0;transform:translateY(12px);animation:sumIn .5s ease forwards;animation-delay:calc(var(--i,0) * 220ms)}
-.sum .grade.anim{transform:scale(.4);animation:gradePop .6s cubic-bezier(.2,1.4,.4,1) forwards;animation-delay:calc(var(--i,0) * 220ms)}
-@keyframes sumIn{to{opacity:1;transform:none}}
-@keyframes gradePop{to{opacity:1;transform:none}}
-:root[data-motion="reduce"] .sum .anim,:root[data-motion="off"] .sum .anim{opacity:1;transform:none;animation:none}
+.hl .scard .s{font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.confetti{position:absolute;left:0;right:0;top:0;height:100vh;pointer-events:none;overflow:hidden;z-index:3}
+.confetti i{position:absolute;top:-16px;width:7px;height:12px;border-radius:2px;animation:fall 2.8s ease-in both}
+
+/* shared entrance */
+.sum .anim{animation:sumIn .5s ease both;animation-delay:calc(var(--i,0) * 200ms)}
+@keyframes sumIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes fall{from{transform:translateY(0) rotate(0)}to{transform:translateY(105vh) rotate(600deg);opacity:.3}}
+:root[data-motion="reduce"] .sum *,:root[data-motion="off"] .sum *,.sum.still *{animation:none!important}
+:root[data-motion="reduce"] .sum .confetti,:root[data-motion="off"] .sum .confetti,.sum.still .confetti{display:none}
+
+/* 1. 經典 */
+.th-classic .bz{width:112px;height:112px;border-radius:50%;display:grid;place-items:center;font-family:var(--num);font-size:64px;font-weight:700;color:#fff;box-shadow:0 10px 28px rgba(10,20,30,.22)}
+.th-classic .bz.g-S{background:radial-gradient(circle at 30% 25%,#F6D365,#D4A017 60%,#A87C0B)}
+.th-classic .bz.g-A{background:radial-gradient(circle at 30% 25%,#7FD3A0,#2F7D4F 65%)}
+.th-classic .bz.g-B{background:radial-gradient(circle at 30% 25%,#8DB4E8,#3D6FB6 65%)}
+.th-classic .bz.g-C{background:radial-gradient(circle at 30% 25%,#F0A08E,#C2412D 65%)}
+.sum.th-classic .bz{animation:pop .6s cubic-bezier(.2,1.4,.4,1) both .25s}
+@keyframes pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:none}}
+
+/* 2. 手帳 */
+.th-journal{--s-bg:#F5EFE3;--s-fg:#3B3128;--s-muted:#8A7B6A;--s-card:#FBF7EF;--s-line:#E2D7C4;--s-good:#4E7A3A;--s-bad:#B03A2E;font-family:"Noto Serif TC","Songti TC",serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .th-journal{--s-bg:#25211C;--s-fg:#EDE4D6;--s-muted:#A8998A;--s-card:#2E2923;--s-line:#433B32;--s-good:#9CC27E;--s-bad:#E58A7A}}
+.th-journal .scard{border-style:dashed}
+.th-journal .bz{transform:rotate(-10deg);border:4px solid var(--gc);border-radius:14px;padding:5px;color:var(--gc)}
+.th-journal .bz .in{border:1.5px solid var(--gc);border-radius:9px;padding:6px 20px;text-align:center}
+.th-journal .bz b{display:block;font-size:56px;line-height:1;font-family:var(--num)}
+.th-journal .bz span{display:block;font-size:12px;letter-spacing:.25em;margin-top:6px}
+.sum.th-journal .bz{animation:stamp .55s cubic-bezier(.3,1.3,.5,1) both .3s}
+@keyframes stamp{0%{opacity:0;transform:scale(2.2) rotate(-10deg)}60%{opacity:1;transform:scale(.92) rotate(-10deg)}100%{transform:scale(1) rotate(-10deg)}}
+
+/* 3. 頒獎典禮 */
+.th-award{--s-bg:#2A1B07;--s-fg:#FAEEDA;--s-muted:#C9A86A;--s-card:#3A2710;--s-line:#5C4219;--s-good:#E7C55B;--s-bad:#F09595;font-family:"Noto Serif TC","Songti TC",serif}
+.th-award .sum-title{color:#FAC775}
+.th-award .bz{display:flex;flex-direction:column;align-items:center}
+.th-award .bz .disc{width:100px;height:100px;border-radius:50%;background:#FAEEDA;border:6px solid var(--gc);display:grid;place-items:center;font-family:var(--num);font-size:52px;font-weight:700;color:#4A3208}
+.th-award .bz .rib{display:flex;gap:8px;margin-top:-8px}
+.th-award .bz .rib i{display:block;width:18px;height:32px;background:#A32D2D;transform:skewX(12deg)}
+.th-award .bz .rib i+i{transform:skewX(-12deg)}
+.sum.th-award .bz{animation:drop .9s cubic-bezier(.3,1.2,.5,1) both .3s}
+@keyframes drop{0%{opacity:0;transform:translateY(-160px)}60%{opacity:1;transform:translateY(10px)}80%{transform:translateY(-4px)}100%{transform:none}}
+
+/* 4. 街機 */
+.th-arcade{--s-bg:#1B1640;--s-fg:#E8E6FF;--s-muted:#9E98D8;--s-card:#252058;--s-line:#3A3380;--s-good:#7EE0B5;--s-bad:#FF8A8A}
+.th-arcade,.th-arcade .num,.th-arcade .hero{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.th-arcade .sum-title{color:#FAC775;letter-spacing:.08em}
+.th-arcade .scard{border-radius:4px}
+.th-arcade .bz{text-align:center;color:#FAC775}
+.th-arcade .bz .lt{font-size:12px;letter-spacing:.4em;color:#AFA9EC}
+.th-arcade .bz .big{font-size:88px;font-weight:700;font-style:italic;line-height:1}
+.th-arcade .bz .stars{font-size:24px;letter-spacing:4px}
+.th-arcade .bz .stars i{font-style:normal;display:inline-block}
+.th-arcade .bz .stars i.off{opacity:.25}
+.sum.th-arcade .bz .big{animation:pop .5s cubic-bezier(.2,1.4,.4,1) both .3s}
+.sum.th-arcade .bz .stars i{animation:pop .35s cubic-bezier(.2,1.6,.4,1) both;animation-delay:calc(.7s + var(--n) * .18s)}
+
+/* 5. 集卡 */
+.th-card{--s-bg:#EEEAF8;--s-fg:#2A2342;--s-muted:#6E6690;--s-card:#F8F6FD;--s-line:#D8D1EE;--s-good:#3B7D57;--s-bad:#B5463A}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .th-card{--s-bg:#1D1A2A;--s-fg:#ECE8FA;--s-muted:#A39CC4;--s-card:#272338;--s-line:#3A3452;--s-good:#7FD3A0;--s-bad:#F09595}}
+.th-card .bz{width:104px;height:148px;border-radius:14px;border:4px solid var(--gc);background:var(--s-card);display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(4deg)}
+.th-card .bz .t{font-size:11px;color:var(--s-muted);letter-spacing:.1em}
+.th-card .bz .big{font-family:var(--num);font-size:64px;font-weight:700;color:var(--gc);line-height:1.1}
+.th-card .bz .ln{width:46px;height:4px;border-radius:2px;background:var(--gc)}
+.th-card .bz .r{font-size:12px;font-weight:700;color:var(--gc);margin-top:6px}
+.sum.th-card .bz{animation:flip .9s ease both .3s}
+@keyframes flip{0%{opacity:0;transform:perspective(600px) rotateY(180deg) scale(.6)}50%{opacity:1}100%{transform:perspective(600px) rotateY(0) rotate(4deg)}}
+
+/* 6. 極簡 */
+.th-min .scard{background:none;border-width:1px;border-radius:4px}
+.th-min .sum-title{font-weight:500;letter-spacing:.06em}
+.th-min .gtitle{color:var(--s-fg,var(--ink));font-weight:500}
+.th-min .bz{width:112px;height:112px;border-radius:50%;border:2px solid currentColor;display:grid;place-items:center}
+.th-min .bz .in{width:94px;height:94px;border-radius:50%;border:1px solid currentColor;display:grid;place-items:center;font-family:var(--num);font-size:48px;font-weight:400}
+.th-min .rankh .bar i{background:currentColor!important;opacity:.55}
+.sum.th-min .anim{animation-duration:.35s}
+
+/* 7. 街頭任務 */
+.th-street{--s-bg:#232321;--s-fg:#F1EFE8;--s-muted:#9A988F;--s-card:#2C2C2A;--s-line:#4A4945;--s-good:#97C459;--s-bad:#F09595}
+.th-street .sum-head{text-align:left}
+.th-street .sum-title{font-size:38px;line-height:1.05;color:#5DCAA5;transform:skewX(-10deg);transform-origin:left;display:inline-block}
+.th-street .sum-title.fail{color:#EF9F27}
+.th-street .slash{height:4px;width:130px;background:currentColor;color:#5DCAA5;transform:skewX(-10deg);margin-top:8px}
+.th-street .badgew{justify-content:flex-start;align-items:center;gap:12px}
+.th-street .bz{transform:skewX(-10deg);background:#EF9F27;color:#412402;font-family:var(--num);font-size:40px;font-weight:700;padding:0 18px;line-height:1.3}
+.th-street .bz.g-C{background:#F09595;color:#4A1B0C}
+.th-street .gtitle{color:#FAC775}
+.th-street .scard{border-radius:0;background:none}
+.th-street h3{letter-spacing:.2em;font-size:12px;color:var(--s-muted)}
+.th-street .rankh .no{color:#EF9F27}
+.sum.th-street::before{content:"";position:fixed;inset:0;background:#000;z-index:5;pointer-events:none;animation:blackout .5s ease both}
+@keyframes blackout{from{opacity:1}to{opacity:0;visibility:hidden}}
+:root[data-motion="reduce"] .sum.th-street::before,:root[data-motion="off"] .sum.th-street::before,.sum.th-street.still::before{display:none}
+.sum.th-street .sum-title{animation:slash .55s cubic-bezier(.2,1.2,.4,1) both .35s}
+@keyframes slash{0%{opacity:0;transform:translateX(-80px) skewX(-10deg)}70%{opacity:1;transform:translateX(8px) skewX(-10deg)}100%{transform:skewX(-10deg)}}
+.sum.th-street .sum-in{animation:shake .32s ease .9s}
+@keyframes shake{0%,100%{transform:none}25%{transform:translateX(-5px)}50%{transform:translateX(5px)}75%{transform:translateX(-2px)}}
+.sum.th-street .bz{animation:stampSk .45s cubic-bezier(.3,1.4,.5,1) both 1.05s}
+@keyframes stampSk{0%{opacity:0;transform:scale(1.9) skewX(-10deg)}100%{opacity:1;transform:skewX(-10deg)}}
+.sum.th-street .hero{animation:cash .7s ease both 1.9s}
+@keyframes cash{0%{opacity:0}40%{opacity:1;color:#fff;text-shadow:0 0 16px #97C459}100%{opacity:1}}
+.sum.th-street .anim{animation-name:slideUp}
+@keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
 .settle{margin:16px 0 0;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
 .settle-h{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;background:none;border:0;font-size:14px;text-align:left}
 .settle-h .lbl{font-weight:700}
@@ -338,7 +462,7 @@ li.swipe .tx{position:relative;z-index:1;background:var(--bg);transition:transfo
 
 <script>
 // ===== App version: change only this line when releasing (sw.js picks it up automatically) =====
-const APP_VERSION='v22';
+const APP_VERSION='v23';
 const PALETTE=['#1F7A80','#D29A17','#8A4F7D','#3D6FB6','#5C8A3A','#C25B3A','#6B6F7A'];
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -421,7 +545,7 @@ async function cloudConnect(){
     const q=await col.where('members','array-contains',u.uid).get();
     if(q.empty){
       const ref=col.doc();
-      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules||null,gradeComments:S.gradeComments||null,
+      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules||null,sumTheme:S.sumTheme||null,themeText:S.themeText?clean(S.themeText):null,
         createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
       await writeTxns(ref,S.txns);
       lid=ref.id;toast('已把這台裝置的資料上傳到雲端');
@@ -449,8 +573,8 @@ function subscribe(ref){
     if(!snap.exists){fail({code:'permission-denied'});return}
     if(snap.metadata.hasPendingWrites)return;
     const d=snap.data();
-    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.jarPlan=d.jarPlan||{};S.gradeRules=d.gradeRules||null;S.gradeComments=d.gradeComments||null;S.ledgerName=d.name||'我的帳本';
-    const mig=migrateJarPlan();saveLocal();safeRender();if(mig)persist();
+    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.jarPlan=d.jarPlan||{};S.gradeRules=d.gradeRules||null;S.gradeComments=d.gradeComments||null;S.sumTheme=d.sumTheme||null;S.themeText=d.themeText||null;S.ledgerName=d.name||'我的帳本';
+    const mig=migrateJarPlan()|migrateTheme();saveLocal();safeRender();if(mig)persist();
     if(!Cloud.ledgerLoaded){Cloud.ledgerLoaded=true;startJars()}
     scheduleMirror();
   },fail));
@@ -477,7 +601,7 @@ function persist(){ // buckets & categories
   if(!cloudOn())return;
   clearTimeout(Cloud.metaTimer);
   Cloud.metaTimer=setTimeout(()=>{
-    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules?clean(S.gradeRules):null,gradeComments:S.gradeComments?clean(S.gradeComments):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules?clean(S.gradeRules):null,sumTheme:S.sumTheme||null,themeText:S.themeText?clean(S.themeText):null,gradeComments:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
       .catch(e=>{Cloud.err='設定沒有存到雲端：'+(e.message||e.code);renderIfSettings()});
     syncStatus();scheduleMirror();
   },600);
@@ -775,7 +899,7 @@ function applyMotion(){document.documentElement.dataset.motion=motionPref()}
 applyMotion();
 function init(){
   S=loadLocal()||defaults();
-  migrate();migrateJarPlan();saveLocal();
+  migrate();migrateJarPlan();migrateTheme();saveLocal();
   render();
   syncStatus();
   cloudInit();
@@ -1285,27 +1409,115 @@ function settingsView(){
 }
 
 /* ---------- month summary (月結算) ---------- */
-// grading thresholds (adjustable later in developer mode; stored with the ledger)
+// grading thresholds are shared by every style (developer mode → 評等條件)
 const GRADE_DEFAULT={sRate:0.30,aRate:0.10,bMaxOver:1};
 const gradeRules=()=>Object.assign({},GRADE_DEFAULT,S.gradeRules||{});
 const GRADE_ORDER='CBAS';
-function commentsOf(g){const l=((S.gradeComments||{})[g]||[]).map(s=>String(s).trim()).filter(Boolean);return l.length?l:COMMENTS[g]}
-const COMMENTS={
-  S:['這個月很省喔！你是省錢達人 🏆','每個罐子都守住了，太厲害了！✨','存錢功力滿分，繼續保持！💎'],
-  A:['表現不錯！預算控制得很穩 👍','離省錢達人只差一步了！','穩穩的，這個月過得很踏實 🌱'],
-  B:['有個罐子超支了，下個月注意一下就好','整體還行，再收斂一點會更好 🙂','小小失守，下個月扳回來！'],
-  C:['這個月花得有點多喔…下個月一起加油 💪','錢包在哭泣了…先從一個罐子開始控制吧 🥲','沒關係，記下來就是改變的開始！']
+const STARS={S:4,A:3,B:2,C:1};
+
+/* Each style (結算風格) = colours/animation in CSS (.th-<id>) + badge markup + wording + default titles/comments.
+   To add a style: add one entry here and one CSS block. */
+const BASE_L={
+  kick:null,title:(y,m)=>`${y} 年 ${m} 月結算`,
+  totals:'收支總覽',rank:'分類支出排行',jars:'罐子成績單',hl:'亮點數據',
+  inc:'收入',spend:'支出',net:'結餘',hero:false,
+  jarOk:v=>'✓ 剩 '+money(v),jarBad:v=>'⚠ 超支 '+money(v),
+  big:'最大的一筆支出',freq:'最常記的分類',zero:'零支出天數',avg:'平均每日支出',up:'比上月增加最多',down:'比上月減少最多',
+  prev:(p,g,a)=>`上月 ${p} → 本月 ${g} ${a}`,
+  moreSpend:'比上月多花',lessSpend:'比上月少花',moreSave:'比上月多存',lessSave:'比上月少存',moreInc:'比上月多',lessInc:'比上月少',same:'和上月一樣',
+  noPrev:'沒有上個月的資料可以比較。',rankNo:k=>k+1
 };
+const THEMES={
+  classic:{name:'經典',desc:'彩色圓章，淡入與數字跳動',
+    badge:(g)=>`<div class="bz g-${g}">${g}</div>`,L:{},
+    titles:{S:'省錢達人',A:'穩健理財',B:'小有失守',C:'需要加油'},
+    comments:{S:['這個月很省喔！你是省錢達人 🏆','每個罐子都守住了，太厲害了！✨','存錢功力滿分，繼續保持！💎'],
+      A:['表現不錯！預算控制得很穩 👍','離省錢達人只差一步了！','穩穩的，這個月過得很踏實 🌱'],
+      B:['有個罐子超支了，下個月注意一下就好','整體還行，再收斂一點會更好 🙂','小小失守，下個月扳回來！'],
+      C:['這個月花得有點多喔…下個月一起加油 💪','錢包在哭泣了…先從一個罐子開始控制吧 🥲','沒關係，記下來就是改變的開始！']}},
+  journal:{name:'手帳',desc:'紙張質感，評價章蓋下去',
+    badge:(g,t)=>`<div class="bz g-${g}"><div class="in"><b>${g}</b><span>${esc(t)}</span></div></div>`,inBadge:true,
+    L:{kick:(y)=>`${y}`,title:(y,m)=>`${m} 月的小結`,totals:'本月收支',rank:'花費排行',jars:'罐子點名',hl:'小筆記',
+      jarOk:v=>'✓ 守住了・剩 '+money(v),jarBad:v=>'✗ 超支 '+money(v)},
+    titles:{S:'完美的一個月',A:'很不錯的一個月',B:'普通的一個月',C:'辛苦的一個月'},
+    comments:{S:['這個月的預算本寫得漂漂亮亮 ✍️','每一筆都花在刀口上，給自己蓋個章！'],A:['穩穩的一個月，記得獎勵自己一杯咖啡 ☕','差一點點就滿分了，下個月見！'],
+      B:['有一個罐子超出預算了，翻翻小筆記看看原因','偶爾放縱一下沒關係，下個月再調整'],C:['這個月比較辛苦，寫下來就是改變的開始','先別灰心，下一頁會更好的 🌱']}},
+  award:{name:'頒獎典禮',desc:'金色舞台，獎牌落下、彩帶灑落',confetti:true,
+    badge:(g)=>`<div class="bz g-${g}"><div class="disc">${g}</div><div class="rib"><i></i><i></i></div></div>`,
+    L:{kick:(y)=>`— ${y} 年度 —`,title:(y,m)=>`${m} 月頒獎典禮`,totals:'得獎紀錄',rank:'花費榜',jars:'各罐表現',hl:'特別獎項',
+      rankNo:k=>['金','銀','銅'][k]||k+1,jarOk:v=>'🏅 剩 '+money(v),jarBad:v=>'失格・超支 '+money(v),
+      big:'最大手筆獎',freq:'最常出場獎',zero:'自律獎',avg:'每日平均',up:'退步最多',down:'最佳進步獎',prev:(p,g,a)=>`上屆 ${p} → 本屆 ${g} ${a}`},
+    titles:{S:'金獎得主',A:'銀獎得主',B:'銅獎得主',C:'參加獎'},
+    comments:{S:['恭喜獲得本月最佳省錢獎 🏆','評審一致通過，實至名歸！'],A:['表現亮眼，獲得評審團肯定 👏','距離金獎只有一步之遙'],
+      B:['入圍了！下次有機會拿更大的獎','評審建議：再收斂一點會更好'],C:['感謝參與，下個月再來挑戰金獎','重在參與，下個月再戰！']}},
+  arcade:{name:'街機',desc:'像素遊戲風，星星逐顆亮起',
+    badge:(g)=>`<div class="bz g-${g}"><div class="lt">RANK</div><div class="big">${g}</div><div class="stars">${[0,1,2,3].map(n=>`<i class="${n<STARS[g]?'':'off'}" style="--n:${n}">★</i>`).join('')}</div></div>`,
+    L:{kick:(y,m)=>`STAGE ${String(m).padStart(2,'0')}`,title:(y,m,g)=>g==='C'?'STAGE FAILED?':'STAGE CLEAR',totals:'SCORE',rank:'ITEMS',jars:'JARS',hl:'BONUS',
+      inc:'INCOME',spend:'SPEND',net:'SAVE',jarOk:v=>'OK '+money(v),jarBad:v=>'OVER '+money(v),
+      big:'MAX HIT',freq:'COMBO',zero:'NO-SPEND DAYS',avg:'AVG / DAY',up:'POWER DOWN',down:'POWER UP',prev:(p,g,a)=>`LAST ${p} → NOW ${g} ${a}`,
+      moreSpend:'比上關多花',lessSpend:'比上關少花',moreSave:'比上關多存',lessSave:'比上關少存',moreInc:'比上關多',lessInc:'比上關少',same:'和上關一樣',
+      noPrev:'沒有上一關的紀錄可以比較。',rankNo:k=>String(k+1).padStart(2,'0')},
+    titles:{S:'PERFECT!',A:'GREAT!',B:'GOOD',C:'TRY AGAIN'},
+    comments:{S:['NEW RECORD! 你是傳說中的省錢玩家','ALL CLEAR! 零失誤通關'],A:['HIGH SCORE! 差一點就完美通關','操作穩定，繼續保持'],
+      B:['STAGE CLEAR，但有一個罐子 HP 歸零','還有進步空間，再挑戰一次！'],C:['投幣再來一局吧','別放棄，下一關會更順利']}},
+  card:{name:'集卡',desc:'像抽到一張卡，翻牌登場',inBadge:true,
+    badge:(g,t)=>`<div class="bz g-${g}"><div class="t">本月評等</div><div class="big">${g}</div><div class="ln"></div><div class="r">${esc(t)}</div></div>`,
+    L:{kick:()=>'本月抽卡結果',title:(y,m)=>`${y} 年 ${m} 月`,totals:'卡池統計',rank:'花費排行',jars:'罐子圖鑑',hl:'稀有掉落',
+      jarOk:v=>'收藏中・剩 '+money(v),jarBad:v=>'已燒毀・超支 '+money(v)},
+    titles:{S:'傳說級',A:'史詩級',B:'稀有級',C:'普通級'},
+    comments:{S:['抽到傳說卡了！這個月的自制力爆表 ✨','閃卡出現！好好收藏這個月'],A:['史詩級的一個月，卡池很給力','差一點就是傳說，下次一定'],
+      B:['稀有卡也不錯，下個月繼續抽','有一張卡被燒掉了…注意超支的罐子'],C:['這次是普通卡，下個月保底一定出貨','別灰心，抽卡和存錢都需要耐心']}},
+  min:{name:'極簡',desc:'黑白細線，動畫最少',
+    badge:(g)=>`<div class="bz g-${g}"><div class="in">${g}</div></div>`,
+    L:{kick:()=>'月結算',title:(y,m)=>`${y}.${String(m).padStart(2,'0')}`,totals:'收支',rank:'支出排行',jars:'罐子',hl:'摘要',
+      jarOk:v=>'剩 '+money(v),jarBad:v=>'超支 '+money(v)},
+    titles:{S:'優異',A:'良好',B:'尚可',C:'待改善'},
+    comments:{S:['預算全數達成。'],A:['表現穩定，維持即可。'],B:['一個罐子超出預算。'],C:['支出偏高，建議檢視。']}},
+  street:{name:'街頭任務',desc:'動作電影感，標題重擊登場',side:true,
+    badge:(g)=>`<div class="bz g-${g}">${g}</div>`,
+    L:{kick:(y,m)=>`行動代號：${y} / ${String(m).padStart(2,'0')}`,title:(y,m,g)=>g==='C'?'任務勉強過關':'任務完成',
+      totals:'戰果',rank:'開銷清單',jars:'金庫狀態',hl:'行動紀錄',inc:'進帳',spend:'開銷',net:'本月入袋',hero:true,
+      jarOk:v=>'安全・剩 '+money(v),jarBad:v=>'被掏空・超支 '+money(v),
+      big:'最大一筆開銷',freq:'最常出手',zero:'按兵不動',avg:'每日平均開銷',up:'開銷暴增',down:'開銷縮減',prev:(p,g,a)=>`上次行動 ${p} → 這次 ${g}`,
+      moreSpend:'比上次行動多花',lessSpend:'比上次行動少花',moreSave:'比上次行動多撈',lessSave:'比上次行動少撈',moreInc:'比上次多進帳',lessInc:'比上次少進帳',same:'和上次一樣',
+      noPrev:'沒有上一次行動的紀錄可以比較。',rankNo:k=>String(k+1).padStart(2,'0')},
+    titles:{S:'俐落收工',A:'乾淨脫身',B:'有驚無險',C:'狼狽撤退'},
+    comments:{S:['乾淨俐落，一毛都沒多花','這次行動堪稱教科書等級'],A:['順利脫身，戰利品到手','小有波折，但任務完成'],
+      B:['差點失手，有個金庫被掏空了','驚險過關，下次計畫要更周密'],C:['行動失控，開銷爆表…先避避風頭','這次虧了，回去重新擬定計畫']}}
+};
+const THEME_IDS=Object.keys(THEMES);
+const themeId=()=>THEMES[S.sumTheme]?S.sumTheme:'classic';
+function themeText(id){ // titles and comments for a style, falling back to its defaults
+  const t=THEMES[id],u=(S.themeText||{})[id]||{},titles={},comments={};
+  for(const g of 'SABC'){
+    titles[g]=((u.titles||{})[g]||'').trim()||t.titles[g];
+    const l=((u.comments||{})[g]||[]).map(s=>String(s).trim()).filter(Boolean);comments[g]=l.length?l:t.comments[g];
+  }
+  return {titles,comments};
+}
+function ensureThemeText(id){
+  S.themeText=S.themeText||{};const t=THEMES[id];
+  const u=S.themeText[id]=S.themeText[id]||{};
+  u.titles=Object.assign({},t.titles,u.titles||{});
+  u.comments=u.comments||{};for(const g of 'SABC')if(!u.comments[g])u.comments[g]=t.comments[g].slice();
+  return u;
+}
+function migrateTheme(){ // v22 kept one set of comments: it becomes the classic style's comments
+  if(!S.gradeComments)return false;
+  S.themeText=S.themeText||{};S.themeText.classic=Object.assign({},S.themeText.classic,{comments:S.gradeComments});
+  S.gradeComments=null;return true;
+}
+
 function daysIn(mk){const [y,m]=mk.split('-').map(Number);return new Date(y,m,0).getDate()}
 function monthData(mk){
   const me=myUid();
   const inc=S.txns.filter(t=>t.type==='income'&&t.date.slice(0,7)===mk).reduce((a,t)=>a+t.amount,0);
-  const exps=[]; // {key,name,emoji,amount (my part),full,date,note,shared}
+  const exps=[];
   for(const t of S.txns)if(t.type==='expense'&&t.date.slice(0,7)===mk){const c=catById(t.catId);exps.push({key:t.catId||'?',name:c?c.name:'已刪除分類',emoji:c?c.emoji:'🧾',amount:t.amount,full:t.amount,date:t.date,note:t.note||'',shared:false,mine:true})}
   for(const j of jarsList())for(const t of (Cloud.jarTxns[j.id]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===mk)
-    exps.push({key:'s:'+(t.catKey||t.catName||'?'),name:t.catName||'共用支出',emoji:t.emoji||'🧾',amount:myShare(t),full:t.amount,date:t.date,note:t.note||'',shared:true,jar:j.name,mine:t.by===me});
+    exps.push({key:'s:'+(t.catKey||t.catName||'?'),name:t.catName||'共用支出',emoji:t.emoji||'🧾',amount:myShare(t),full:t.amount,date:t.date,note:t.note||'',shared:true,jar:j.name,mine:t.by===me,by:t.by===me?'你':(t.byName||'成員')});
   const spend=exps.reduce((a,e)=>a+e.amount,0);
-  const cats={};for(const e of exps){const g=cats[e.key]||(cats[e.key]={key:e.key,name:e.name,emoji:e.emoji,shared:e.shared,value:0,count:0});g.value+=e.amount;if(e.mine)g.count++}
+  const cats={};for(const e of exps){const g=cats[e.key]||(cats[e.key]={key:e.key,name:e.name,emoji:e.emoji,shared:e.shared,value:0,count:0,n:0});g.value+=e.amount;g.n++;if(e.mine)g.count++}
   const st=stats(null,mk);
   const jars=S.buckets.map(b=>{const s=st[b.id]||{open:0,monthIn:0,monthOut:0,bal:0};return {name:b.name,color:b.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut,bal:s.bal}});
   const sjars=jarsList().map(j=>{const s=jarStats(j.id,mk);return {name:j.name,color:j.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut,bal:s.bal,shared:true}});
@@ -1323,87 +1535,127 @@ function gradeOf(d){
   }
   return d.over===0?'A':d.over<=r.bMaxOver?'B':'C';
 }
-function commentFor(g,mk){const l=commentsOf(g);let h=0;for(const c of mk)h=(h*31+c.charCodeAt(0))>>>0;return l[h%l.length]}
+function pickComment(list,mk){let h=0;for(const c of mk)h=(h*31+c.charCodeAt(0))>>>0;return list[h%list.length]}
 const pct=(a,b)=>b?Math.round(a/b*100):0;
-function delta(cur,prev,kind){ // kind: 'spend' (more = bad) | 'save' (more = good) | 'inc'
-  const d=cur-prev;if(!d)return '<span class="flat">和上月一樣</span>';
+function delta(cur,prev,kind,L){
+  const d=cur-prev;if(!d)return `<span class="flat">${L.same}</span>`;
   const p=prev?`（${d>0?'+':'−'}${Math.abs(pct(d,Math.abs(prev)))}%）`:'';
-  if(kind==='spend')return d>0?`<span class="up-bad">比上月多花 ${money(d)}${p}</span>`:`<span class="dn-good">比上月少花 ${money(-d)}${p}</span>`;
-  if(kind==='save')return d>0?`<span class="up-good">比上月多存 ${money(d)}</span>`:`<span class="dn-bad">比上月少存 ${money(-d)}</span>`;
-  return d>0?`<span class="up-good">比上月多 ${money(d)}${p}</span>`:`<span class="flat">比上月少 ${money(-d)}${p}</span>`;
+  if(kind==='spend')return d>0?`<span class="bad">${L.moreSpend} ${money(d)}${p}</span>`:`<span class="good">${L.lessSpend} ${money(-d)}${p}</span>`;
+  if(kind==='save')return d>0?`<span class="good">${L.moreSave} ${money(d)}</span>`:`<span class="bad">${L.lessSave} ${money(-d)}</span>`;
+  return d>0?`<span class="good">${L.moreInc} ${money(d)}${p}</span>`:`<span class="flat">${L.lessInc} ${money(-d)}${p}</span>`;
 }
 const countSpan=(v,cls)=>`<span class="num ${cls||''}" data-count="${Math.round(v)}">${money(v)}</span>`;
-function summaryHtml(mk){
+
+// expanded category details
+const SORT_KEY='fenguan-sumsort';
+const SORTS=[['amt_desc','金額（大到小）'],['amt_asc','金額（小到大）'],['date_desc','日期（新到舊）'],['date_asc','日期（舊到新）']];
+function sumSort(){try{const v=localStorage.getItem(SORT_KEY);if(SORTS.some(s=>s[0]===v))return v}catch(e){}return 'amt_desc'}
+let sumState=null; // {mk, theme, open:Set, all:Set}
+function catDetail(d,key){
+  const s=sumSort(),list=d.exps.filter(e=>e.key===key).slice();
+  list.sort((a,b)=>s==='amt_desc'?b.amount-a.amount:s==='amt_asc'?a.amount-b.amount:s==='date_desc'?(b.date<a.date?-1:b.date>a.date?1:0):(a.date<b.date?-1:a.date>b.date?1:0));
+  const all=sumState.all.has(key),shown=all?list:list.slice(0,10);
+  return `<div class="cdet"><div class="cdh"><span>${list.length} 筆</span>
+    <label class="sortb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg>${SORTS.find(x=>x[0]===s)[1]}
+      <select data-edit="sumsort" aria-label="排序方式">${SORTS.map(([v,l])=>`<option value="${v}" ${v===s?'selected':''}>${l}</option>`).join('')}</select></label></div>
+    ${shown.map(e=>`<div class="cd"><span class="dt">${+e.date.slice(5,7)}/${+e.date.slice(8)}</span>
+      <span class="nt">${e.note?esc(e.note):'<span class="flat">（無備註）</span>'}${e.shared?`<small>總額 ${money(e.full)}・${esc(e.by)}記錄</small>`:''}</span>
+      <span class="am num">${money(e.amount)}</span></div>`).join('')}
+    ${list.length>shown.length?`<button class="cdmore" data-action="catmore" data-k="${esc(key)}">顯示全部 ${list.length} 筆</button>`:''}</div>`;
+}
+function summaryHtml(mk,tid){
+  const th=THEMES[tid],L=Object.assign({},BASE_L,th.L),tx=themeText(tid);
   const d=monthData(mk),p=monthData(shiftMonth(mk,-1));
   const [y,m]=mk.split('-').map(Number);
-  const live=false; // the summary is only offered for finished months
   let i=0;const A=()=>`anim" style="--i:${i++}`;
-  if(!d.has)return `<div class="sum-head"><div class="sum-title">${y} 年 ${m} 月結算</div></div><div class="empty">這個月還沒有收入或支出紀錄。</div>`;
-  const g=gradeOf(d),pg=p.has?gradeOf(p):null;
+  if(!d.has)return `<div class="sum-head"><div class="sum-title">${esc(L.title(y,m,'A'))}</div></div><div class="empty">這個月還沒有收入或支出紀錄。</div>`;
+  const g=gradeOf(d),pg=p.has?gradeOf(p):null,title=tx.titles[g];
   const arrow=pg?(GRADE_ORDER.indexOf(g)>GRADE_ORDER.indexOf(pg)?'⬆':GRADE_ORDER.indexOf(g)<GRADE_ORDER.indexOf(pg)?'⬇':'＝'):'';
-  // header
-  let html=`<div class="sum-head"><div class="sum-title ${A()}">${y} 年 ${m} 月結算</div>
-    <div class="sum-status">${live?'結算中・評等為暫定':''}</div>
-    <div class="grade g-${g} ${live?'tent':''} ${A()}" aria-label="評等 ${g}">${g}</div>
-    <div class="sum-comment ${A()}">${live?'目前：':''}${esc(commentFor(g,mk))}</div>
-    ${pg?`<div class="sum-prev">上月 ${pg} → 本月 ${g} ${arrow}</div>`:''}</div>`;
+  const comment=esc(pickComment(tx.comments[g],mk));
+  let html=`<div class="sum-head">${L.kick?`<div class="kick">${esc(L.kick(y,m))}</div>`:''}
+    <div class="sum-title ${tid==='street'&&g==='C'?'fail':''}">${esc(L.title(y,m,g))}</div>${tid==='street'?'<div class="slash"></div>':''}`;
+  if(th.side)html+=`<div class="badgew">${th.badge(g,title)}<div><div class="gtitle g-${g}">評價：${esc(title)}</div><div class="sum-comment" style="font-size:13px;margin-top:2px">${comment}</div></div></div>`;
+  else html+=`<div class="badgew">${th.badge(g,title)}</div>${th.inBadge?'':`<div class="gtitle g-${g}">${esc(title)}</div>`}<div class="sum-comment">${comment}</div>`;
+  html+=`${pg?`<div class="sum-prev">${esc(L.prev(pg,g,arrow))}</div>`:''}</div>`;
   // totals
-  html+=`<section class="${A()}"><h3>收支總覽</h3><div class="cards3">
-    <div class="scard"><div class="k">收入</div><div class="v">${countSpan(d.inc)}</div>${p.has?`<div class="d">${delta(d.inc,p.inc,'inc')}</div>`:''}</div>
-    <div class="scard"><div class="k">支出</div><div class="v">${countSpan(d.spend)}</div>${p.has?`<div class="d">${delta(d.spend,p.spend,'spend')}</div>`:''}</div>
-    <div class="scard"><div class="k">結餘</div><div class="v">${countSpan(d.net,d.net<0?'up-bad':'')}</div>${p.has?`<div class="d">${delta(d.net,p.net,'save')}</div>`:''}</div></div>
-    ${p.has?'':'<p class="note" style="margin:8px 0 0">沒有上個月的資料可以比較。</p>'}
+  const card=(k,v,dl)=>`<div class="scard"><div class="k">${k}</div><div class="v">${v}</div>${dl?`<div class="d">${dl}</div>`:''}</div>`;
+  html+=`<section class="${A()}"><h3>${L.totals}</h3>`;
+  if(L.hero)html+=`<div class="hero ${d.net<0?'neg':''}">${d.net>=0?'+':''}${countSpan(d.net)}</div>${p.has?`<div class="note" style="margin:2px 0 0">${delta(d.net,p.net,'save',L)}</div>`:''}
+    <div class="cards2">${card(L.inc,countSpan(d.inc),p.has?delta(d.inc,p.inc,'inc',L):'')}${card(L.spend,countSpan(d.spend,'bad'),p.has?delta(d.spend,p.spend,'spend',L):'')}</div>`;
+  else html+=`<div class="cards3">${card(L.inc,countSpan(d.inc),p.has?delta(d.inc,p.inc,'inc',L):'')}${card(L.spend,countSpan(d.spend),p.has?delta(d.spend,p.spend,'spend',L):'')}${card(L.net,countSpan(d.net,d.net<0?'bad':''),p.has?delta(d.net,p.net,'save',L):'')}</div>`;
+  html+=`${p.has?'':`<p class="note" style="margin:8px 0 0">${L.noPrev}</p>`}
     ${d.sjars.length?'<p class="note" style="margin:8px 0 0">支出含共用支出中你的份額；撥到共用罐的錢不算支出。</p>':''}</section>`;
-  // category ranking
+  // category ranking (tap to expand)
   const top=d.cats.length?d.cats[0].value:1;
-  html+=`<section class="${A()}"><h3>分類支出排行</h3>${d.cats.length?d.cats.map((c,k)=>`<div class="rank"><span class="no">${k+1}</span>
+  html+=`<section class="${A()}"><h3>${L.rank}</h3>${d.cats.length?d.cats.map((c,k)=>{const open=sumState.open.has(c.key);
+    return `<div class="rank ${open?'open':''}"><button class="rankh" data-action="catx" data-k="${esc(c.key)}" aria-expanded="${open}"><span class="no">${L.rankNo(k)}</span>
       <span class="nm">${esc(c.emoji)} ${esc(c.name)}${c.shared?'<small>共用份額</small>':''}</span>
-      <span class="am num">${money(c.value)}<small>${pct(c.value,d.spend)}%</small></span>
-      <div class="bar"><i style="width:${(c.value/top*100).toFixed(1)}%;background:${CAT_COLORS[k%CAT_COLORS.length]}"></i></div></div>`).join(''):'<div class="empty" style="padding:12px 0">這個月沒有支出。</div>'}</section>`;
-  // jar report card
+      <span class="am num">${money(c.value)}<small>${pct(c.value,d.spend)}%・${c.n} 筆</small></span><span class="cv">›</span>
+      <div class="bar"><i style="width:${(c.value/top*100).toFixed(1)}%;background:${CAT_COLORS[k%CAT_COLORS.length]}"></i></div></button>
+      ${open?catDetail(d,c.key):''}</div>`}).join(''):'<div class="empty" style="padding:12px 0">這個月沒有支出。</div>'}</section>`;
+  // jars
   const jr=j=>`<div class="jrow"><span class="nm"><span class="dot" style="background:${j.color}"></span>${esc(j.name)}${j.shared?'<span class="pill">共用</span>':''}</span>
-    <span class="st ${j.bal<0?'up-bad':'up-good'}">${j.bal<0?'⚠ 超支 '+money(-j.bal):'✓ 剩 '+money(j.bal)}</span>
+    <span class="st ${j.bal<0?'bad':'good'}">${j.bal<0?L.jarBad(-j.bal):L.jarOk(j.bal)}</span>
     <span class="ds num">花了 ${money(j.spent)} ／ 可用 ${money(j.avail)}</span></div>`;
-  html+=`<section class="${A()}"><h3>罐子成績單</h3>${d.jars.map(jr).join('')}${d.sjars.map(jr).join('')}
+  html+=`<section class="${A()}"><h3>${L.jars}</h3>${d.jars.map(jr).join('')}${d.sjars.map(jr).join('')}
     ${d.sjars.length?'<p class="note" style="margin:8px 0 0">共用罐不列入你的評等。</p>':''}</section>`;
   // highlights + comparison
   const big=d.exps.slice().sort((a,b)=>b.amount-a.amount)[0];
   const freq=d.cats.filter(c=>c.count).sort((a,b)=>b.count-a.count)[0];
-  const upto=mk<curMonth()?daysIn(mk):mk===curMonth()?+today().slice(8):0;
+  const upto=daysIn(mk);
   const spentDays=new Set(d.exps.filter(e=>e.amount>0).map(e=>e.date));
-  const zero=upto?Math.max(0,upto-[...spentDays].filter(x=>+x.slice(8)<=upto).length):null;
-  const card=(k,v,s)=>`<div class="scard"><div class="k">${k}</div><div class="v num">${v}</div>${s?`<div class="s">${s}</div>`:''}</div>`;
+  const hc=(k,v,s)=>`<div class="scard"><div class="k">${k}</div><div class="v num">${v}</div>${s?`<div class="s">${s}</div>`:''}</div>`;
   let cmp='';
   if(p.has){
-    const diffs=[];const pm={};p.cats.forEach(c=>pm[c.key]=c.value);
-    const keys=new Set([...d.cats.map(c=>c.key),...p.cats.map(c=>c.key)]);
+    const pm={};p.cats.forEach(c=>pm[c.key]=c.value);
+    const keys=new Set([...d.cats.map(c=>c.key),...p.cats.map(c=>c.key)]),diffs=[];
     for(const k of keys){const c=d.cats.find(x=>x.key===k)||p.cats.find(x=>x.key===k);diffs.push({c,d:((d.cats.find(x=>x.key===k)||{}).value||0)-(pm[k]||0)})}
-    const inc=diffs.filter(x=>x.d>0).sort((a,b)=>b.d-a.d)[0],dec=diffs.filter(x=>x.d<0).sort((a,b)=>a.d-b.d)[0];
-    cmp=`${inc?card('比上月增加最多',`<span class="up-bad">+${money(inc.d)}</span>`,esc(inc.c.emoji+' '+inc.c.name)):''}${dec?card('比上月減少最多',`<span class="dn-good">−${money(-dec.d)}</span>`,esc(dec.c.emoji+' '+dec.c.name)):''}`;
+    const up=diffs.filter(x=>x.d>0).sort((a,b)=>b.d-a.d)[0],dn=diffs.filter(x=>x.d<0).sort((a,b)=>a.d-b.d)[0];
+    cmp=`${up?hc(L.up,`<span class="bad">+${money(up.d)}</span>`,esc(up.c.emoji+' '+up.c.name)):''}${dn?hc(L.down,`<span class="good">−${money(-dn.d)}</span>`,esc(dn.c.emoji+' '+dn.c.name)):''}`;
   }
-  html+=`<section class="${A()}"><h3>亮點數據</h3><div class="hl">
-    ${big?card('最大的一筆支出',money(big.amount),esc(big.emoji+' '+big.name+(big.note?'・'+big.note:'')+'・'+(+big.date.slice(5,7))+'/'+(+big.date.slice(8)))):''}
-    ${freq?card('最常記的分類',`${freq.count} 筆`,esc(freq.emoji+' '+freq.name)):''}
-    ${zero!==null?card('零支出天數',`${zero} 天`,live?`到今天為止，共 ${upto} 天`:`共 ${upto} 天`):''}
-    ${upto?card('平均每日支出',money(d.spend/upto),''):''}
+  html+=`<section class="${A()}"><h3>${L.hl}</h3><div class="hl">
+    ${big?hc(L.big,money(big.amount),esc(big.emoji+' '+big.name+(big.note?'・'+big.note:'')+'・'+(+big.date.slice(5,7))+'/'+(+big.date.slice(8)))):''}
+    ${freq?hc(L.freq,`${freq.count} 筆`,esc(freq.emoji+' '+freq.name)):''}
+    ${hc(L.zero,`${Math.max(0,upto-spentDays.size)} 天`,`共 ${upto} 天`)}
+    ${hc(L.avg,money(d.spend/upto),'')}
     ${cmp}</div></section>`;
   return html;
 }
-function openSummary(mk){
+function openSummary(mk,tid){
   closeSummary();
-  const el=document.createElement('div');el.className='sum';el.id='summary';
+  tid=THEMES[tid]?tid:themeId();
+  sumState={mk,theme:tid,open:new Set(),all:new Set()};
+  const el=document.createElement('div');el.className='sum th-'+tid;el.id='summary';
   el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');el.setAttribute('aria-label','月結算');
-  el.innerHTML=`<div class="sum-in"><div class="sum-top"><button class="sum-x" data-action="sumclose" aria-label="關閉">✕</button></div>${summaryHtml(mk)}</div>`;
+  el.innerHTML=`<div class="sum-in"><div class="sum-top"><button class="sum-x" data-action="sumclose" aria-label="關閉">✕</button></div>${summaryHtml(mk,tid)}</div>`;
+  if(THEMES[tid].confetti&&motionPref()==='standard'){
+    const cf=document.createElement('div');cf.className='confetti';
+    const cols=['#FAC775','#EF9F27','#F09595','#9FE1CB','#AFA9EC','#FAEEDA'];
+    cf.innerHTML=Array.from({length:34},(_,k)=>`<i style="left:${Math.random()*100}%;background:${cols[k%cols.length]};animation-delay:${(0.9+Math.random()*1.4).toFixed(2)}s;animation-duration:${(2.2+Math.random()*1.6).toFixed(2)}s"></i>`).join('');
+    el.appendChild(cf);
+  }
   document.body.appendChild(el);lockScroll();
   if(motionPref()==='standard')countUp(el);
 }
-function closeSummary(){const el=document.getElementById('summary');if(el){el.remove();unlockScroll()}}
+function rerenderSummary(){ // after expanding/sorting: no replay of the entrance animation
+  const el=document.getElementById('summary');if(!el||!sumState)return;
+  const y=el.scrollTop;el.classList.add('still');
+  el.querySelector('.sum-in').innerHTML=`<div class="sum-top"><button class="sum-x" data-action="sumclose" aria-label="關閉">✕</button></div>${summaryHtml(sumState.mk,sumState.theme)}`;
+  el.scrollTop=y;
+}
+function closeSummary(){const el=document.getElementById('summary');if(el){el.remove();unlockScroll()}sumState=null}
 function countUp(root){
   root.querySelectorAll('[data-count]').forEach((n,k)=>{
     const end=+n.dataset.count,delay=440+k*140,dur=900;let t0=null;n.textContent=money(0);
-    const step=t=>{if(!n.isConnected)return;if(t0===null)t0=t;const x=Math.min(1,Math.max(0,(t-t0-delay)/dur));const e=1-Math.pow(1-x,3);n.textContent=money(end*e);if(x<1)requestAnimationFrame(step)};
+    const step=t=>{if(!n.isConnected)return;if(root.classList.contains('still')){n.textContent=money(end);return}
+      if(t0===null)t0=t;const x=Math.min(1,Math.max(0,(t-t0-delay)/dur));const e=1-Math.pow(1-x,3);n.textContent=money(end*e);if(x<1)requestAnimationFrame(step)};
     requestAnimationFrame(step);
   });
+}
+function lastFinishedMonth(){ // newest finished month that has records (for previews)
+  let mk=shiftMonth(curMonth(),-1);
+  for(let k=0;k<36;k++,mk=shiftMonth(mk,-1))if(monthData(mk).has)return mk;
+  return null;
 }
 
 /* ---------- developer mode ---------- */
@@ -1417,33 +1669,52 @@ function verTap(){
   if(left<=3)toast(on?`再點 ${left} 下關閉開發者模式`:`再點 ${left} 下開啟開發者模式`);
 }
 let devView='home';
+const devTop=(back)=>`<div class="sum-top">${back?`<button class="back" data-action="devgo" data-v="${back[0]}">‹ ${back[1]}</button>`:'<span></span>'}<button class="sum-x" data-action="devclose" aria-label="關閉">✕</button></div>`;
+function themePreview(id,big){const tx=themeText(id);return `<div class="${big?'tpbig':'tp'} th-${id}"><div class="tpz">${THEMES[id].badge('S',tx.titles.S)}</div></div>`}
 function devHtml(){
-  if(devView==='grade'){
+  if(devView==='rules'){
     const r=gradeRules(),pc=v=>Math.round(v*100);
     const rule=(g,label,sub,key,val,unit,max)=>`<div class="rule"><span class="gd g-${g}">${g}</span><span class="tx2">${label}<small>${sub}</small></span>
-      <label class="unit"><input type="number" inputmode="numeric" min="0" max="${max}" step="1" value="${val}" data-edit="gr" data-k="${key}" aria-label="${label}"><span>${unit}</span></label></div>`;
-    const grp=g=>{const l=(S.gradeComments&&S.gradeComments[g])||COMMENTS[g];
-      return `<div class="cgrp"><div class="hd"><span class="gd g-${g}" style="width:24px;height:24px;font-size:13px;border-radius:50%;display:grid;place-items:center;color:#fff">${g}</span>${g} 的評語</div>
-      ${l.map((c,i)=>`<div class="crow"><input type="text" value="${esc(c)}" data-edit="gc" data-g="${g}" data-i="${i}" aria-label="${g} 評語 ${i+1}"><button class="icon-btn" data-action="gcdel" data-g="${g}" data-i="${i}" aria-label="刪除評語">✕</button></div>`).join('')}
-      <button class="ghost" data-action="gcadd" data-g="${g}">新增評語</button></div>`};
-    return `<div class="sum-top"><button class="back" data-action="devback">‹ 開發者選項</button><button class="sum-x" data-action="devclose" aria-label="關閉">✕</button></div>
-      <h1>評等與評語</h1>
-      <h3 style="font-size:15px;margin:0 0 4px">評等條件</h3>
-      <p class="note" style="margin:0 0 6px">結餘率 =（收入 − 支出）÷ 收入；支出含共用份額，不含撥到共用罐的錢。只看你自己的罐子。</p>
+      <span class="unitw"><input type="number" inputmode="numeric" min="0" max="${max}" step="1" value="${val}" data-edit="gr" data-k="${key}" aria-label="${label}"><span class="u">${unit}</span></span></div>`;
+    return `${devTop(['home','開發者選項'])}<h1>評等條件</h1>
+      <p class="note" style="margin:0 0 6px">結餘率 =（收入 − 支出）÷ 收入；支出含共用份額，不含撥到共用罐的錢。只看你自己的罐子。所有結算風格共用這組條件。</p>
       ${rule('S','結餘率至少','且沒有罐子超支','sRate',pc(r.sRate),'%',100)}
       ${rule('A','結餘率至少','且沒有罐子超支','aRate',pc(r.aRate),'%',100)}
       ${rule('B','最多幾個罐子超支','且支出沒有超過收入','bMaxOver',r.bMaxOver,'個',20)}
       <div class="rule"><span class="gd g-C">C</span><span class="tx2">其他情況<small>超支的罐子更多，或支出超過收入</small></span><span></span></div>
       <p class="note" style="margin:8px 0 0">沒有記收入的月份：沒有超支是 A，在 B 的超支上限內是 B，否則是 C。</p>
-      <button class="ghost" style="margin-top:12px" data-action="grreset">恢復預設條件</button>
-      <h3 style="font-size:15px;margin:28px 0 0">評語</h3>
-      <p class="note" style="margin:4px 0 0">每個月會從該評等的評語中固定挑一句；空白的評語會被略過。</p>
-      ${['S','A','B','C'].map(grp).join('')}
-      <button class="ghost danger" style="margin-top:18px" data-action="gcreset">恢復預設評語</button>`;
+      <button class="ghost" style="margin-top:12px" data-action="grreset">恢復預設條件</button>`;
   }
-  return `<div class="sum-top"><span></span><button class="sum-x" data-action="devclose" aria-label="關閉">✕</button></div>
-    <h1>開發者選項</h1>
-    <button class="devitem" data-action="devgo" data-v="grade"><span><span class="t">評等與評語</span><span class="s">調整月結算的評等條件，以及各評等的評語</span></span><span>›</span></button>
+  if(devView==='themes'){
+    const cur=themeId();
+    return `${devTop(['home','開發者選項'])}<h1>結算風格</h1>
+      <p class="note" style="margin:0 0 12px">點選風格進入設定，可以預覽、套用，並調整這個風格的稱號和評語。</p>
+      ${THEME_IDS.map(id=>`<button class="thcard ${id===cur?'on':''}" data-action="devgo" data-v="theme:${id}">${themePreview(id)}
+        <span><span class="nm">${THEMES[id].name}</span><span class="ds">${THEMES[id].desc}</span></span><span class="ck">${id===cur?'✓ 使用中':'›'}</span></button>`).join('')}`;
+  }
+  if(devView.startsWith('theme:')){
+    const id=devView.slice(6),th=THEMES[id];if(!th){devView='themes';return devHtml()}
+    const u=(S.themeText||{})[id]||{},tx=themeText(id),cur=themeId()===id;
+    const grp=g=>{const l=(u.comments&&u.comments[g])||th.comments[g];
+      return `<div class="cgrp"><div class="hd"><span class="gd g-${g}">${g}</span>${g} 的評語</div>
+      ${l.map((c,k)=>`<div class="crow"><input type="text" value="${esc(c)}" data-edit="gc" data-t="${id}" data-g="${g}" data-i="${k}" aria-label="${g} 評語 ${k+1}"><button class="icon-btn" data-action="gcdel" data-t="${id}" data-g="${g}" data-i="${k}" aria-label="刪除評語">✕</button></div>`).join('')}
+      <button class="ghost" data-action="gcadd" data-t="${id}" data-g="${g}">新增評語</button></div>`};
+    return `${devTop(['themes','結算風格'])}<h1>${th.name}</h1>
+      ${themePreview(id,true)}
+      <div class="btns" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="${cur?'ghost':'gbtn'}" style="flex:1 1 140px" data-action="themeuse" data-t="${id}" ${cur?'disabled':''}>${cur?'✓ 使用中':'使用這個風格'}</button>
+        <button class="ghost" style="flex:1 1 140px" data-action="themeprev" data-t="${id}">預覽結算畫面</button></div>
+      <h3 style="font-size:15px;margin:24px 0 4px">稱號</h3>
+      <p class="note" style="margin:0 0 8px">顯示在評等旁邊的稱號，留空會使用預設值。</p>
+      ${'SABC'.split('').map(g=>`<div class="trow"><span class="gd g-${g}">${g}</span><input type="text" value="${esc((u.titles||{})[g]??tx.titles[g])}" placeholder="${esc(th.titles[g])}" data-edit="tt" data-t="${id}" data-g="${g}" aria-label="${g} 的稱號"></div>`).join('')}
+      <h3 style="font-size:15px;margin:24px 0 0">評語</h3>
+      <p class="note" style="margin:4px 0 0">每個月會從該評等的評語中固定挑一句；空白的評語會被略過。</p>
+      ${'SABC'.split('').map(grp).join('')}
+      <button class="ghost danger" style="margin-top:18px" data-action="tcreset" data-t="${id}">恢復這個風格的預設稱號與評語</button>`;
+  }
+  return `${devTop(null)}<h1>開發者選項</h1>
+    <button class="devitem" data-action="devgo" data-v="rules"><span><span class="t">評等條件</span><span class="s">調整 S、A、B 的判斷門檻，所有風格共用</span></span><span>›</span></button>
+    <button class="devitem" data-action="devgo" data-v="themes"><span><span class="t">結算風格</span><span class="s">目前：${THEMES[themeId()].name}・切換風格、調整各風格的稱號與評語</span></span><span>›</span></button>
     <button class="ghost" style="width:100%;margin-top:18px" data-action="devoff">關閉開發者模式</button>
     <p class="note" style="margin-top:10px">也可以在設定頁連點版本號 7 次來關閉。</p>`;
 }
@@ -1454,18 +1725,17 @@ function openDev(v){
   el.innerHTML=`<div class="sum-in">${devHtml()}</div>`;el.scrollTop=0;
 }
 function closeDev(){const el=document.getElementById('dev');if(el){el.remove();unlockScroll()}}
-function devRender(){const el=document.getElementById('dev');if(el){const y=el.scrollTop;el.innerHTML=`<div class="sum-in">${devHtml()}</div>`;el.scrollTop=y}}
-function ensureComments(){S.gradeComments=S.gradeComments||{};for(const g of 'SABC')if(!S.gradeComments[g])S.gradeComments[g]=COMMENTS[g].slice()}
+function devRender(keep){const el=document.getElementById('dev');if(el){const y=el.scrollTop;el.innerHTML=`<div class="sum-in">${devHtml()}</div>`;el.scrollTop=keep?y:0}}
 
 /* ---------- sheet ---------- */
-let lockY=null;
+let lockY=null,lockDepth=0;
 function lockScroll(){ // keep the page behind the sheet still (iPhone ignores overflow:hidden on its own)
-  if(lockY!==null)return;lockY=window.scrollY;
+  lockDepth++;if(lockY!==null)return;lockY=window.scrollY;
   document.documentElement.classList.add('lock');
   Object.assign(document.body.style,{position:'fixed',top:-lockY+'px',left:'0',right:'0'});
 }
 function unlockScroll(){
-  if(lockY===null)return;
+  lockDepth=Math.max(0,lockDepth-1);if(lockY===null||lockDepth>0)return;
   document.documentElement.classList.remove('lock');
   Object.assign(document.body.style,{position:'',top:'',left:'',right:''});
   window.scrollTo(0,lockY);lockY=null;
@@ -1849,14 +2119,17 @@ document.addEventListener('click',e=>{
     case 'swdel':swipeDelete(el.dataset.ref);break;
     case 'vertap':verTap();break;
     case 'devopen':openDev('home');break;
-    case 'devgo':devView=el.dataset.v;devRender();document.getElementById('dev').scrollTop=0;break;
-    case 'devback':devView='home';devRender();break;
+    case 'devgo':devView=el.dataset.v;devRender();break;
     case 'devclose':closeDev();break;
     case 'devoff':try{localStorage.setItem(DEV_KEY,'0')}catch(_){}closeDev();render();toast('已關閉開發者模式');break;
-    case 'grreset':S.gradeRules=null;persist();devRender();toast('已恢復預設條件');break;
-    case 'gcadd':ensureComments();S.gradeComments[el.dataset.g].push('');persist();devRender();{const ins=document.querySelectorAll(`#dev [data-edit=gc][data-g="${el.dataset.g}"]`);if(ins.length)ins[ins.length-1].focus()}break;
-    case 'gcdel':{ensureComments();const l=S.gradeComments[el.dataset.g];if(l.length<=1){toast('每個評等至少要保留一句評語');break}l.splice(+el.dataset.i,1);persist();devRender();break}
-    case 'gcreset':if(!confirm('確定把所有評語恢復成預設？'))break;S.gradeComments=null;persist();devRender();toast('已恢復預設評語');break;
+    case 'grreset':S.gradeRules=null;persist();devRender(true);toast('已恢復預設條件');break;
+    case 'gcadd':{const u=ensureThemeText(el.dataset.t);u.comments[el.dataset.g].push('');persist();devRender(true);const ins=document.querySelectorAll(`#dev [data-edit=gc][data-g="${el.dataset.g}"]`);if(ins.length)ins[ins.length-1].focus();break}
+    case 'gcdel':{const u=ensureThemeText(el.dataset.t),l=u.comments[el.dataset.g];if(l.length<=1){toast('每個評等至少要保留一句評語');break}l.splice(+el.dataset.i,1);persist();devRender(true);break}
+    case 'tcreset':if(!confirm(`確定把「${THEMES[el.dataset.t].name}」的稱號和評語恢復成預設？`))break;if(S.themeText)delete S.themeText[el.dataset.t];persist();devRender(true);toast('已恢復預設');break;
+    case 'themeuse':S.sumTheme=el.dataset.t;persist();devRender(true);toast(`已套用「${THEMES[el.dataset.t].name}」`);break;
+    case 'themeprev':{const mk=lastFinishedMonth();if(!mk){toast('還沒有已結束、而且有紀錄的月份可以預覽');break}openSummary(mk,el.dataset.t);break}
+    case 'catx':{if(!sumState)break;const k=el.dataset.k;sumState.open.has(k)?sumState.open.delete(k):sumState.open.add(k);rerenderSummary();break}
+    case 'catmore':if(sumState){sumState.all.add(el.dataset.k);rerenderSummary()}break;
     case 'summary':openSummary(listMonth);break;
     case 'sumclose':closeSummary();break;
     case 'settle':{settleOpen=!settleOpen;const s=el.closest('.settle');s.classList.toggle('open',settleOpen);el.setAttribute('aria-expanded',settleOpen);break}
@@ -1908,7 +2181,8 @@ document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='lq'){listQuery=t.value;document.getElementById('sbox').classList.toggle('empty',!t.value);refreshResults();return}
   if(t.id==='emocustom'){const v=lastEmoji(t.value);if(t.value!==v)t.value=v;return}
-  if(t.dataset.edit==='gc'){ensureComments();S.gradeComments[t.dataset.g][+t.dataset.i]=t.value;persist();return}
+  if(t.dataset.edit==='gc'){const u=ensureThemeText(t.dataset.t);u.comments[t.dataset.g][+t.dataset.i]=t.value;persist();return}
+  if(t.dataset.edit==='tt'){const u=ensureThemeText(t.dataset.t);u.titles[t.dataset.g]=t.value;persist();return}
   if(draft){
     if(t.id==='amt'){t.value=t.value.replace(/[^0-9]/g,'');draft.amount=t.value;updateHint();return}
     if(t.id==='note'){draft.note=t.value;return}
@@ -1947,7 +2221,8 @@ document.addEventListener('change',e=>{
     else{v=Math.min(100,v)/100;r[k]=v;
       if(k==='aRate'&&r.aRate>r.sRate){r.aRate=r.sRate;toast('A 的門檻不能高於 S，已調整為相同')}
       if(k==='sRate'&&r.aRate>r.sRate){r.aRate=r.sRate;toast('A 的門檻已一併調低，不能高於 S')}}
-    S.gradeRules=r;persist();devRender();return}
+    S.gradeRules=r;persist();devRender(true);return}
+  if(t.dataset.edit==='sumsort'){try{localStorage.setItem(SORT_KEY,t.value)}catch(_){}rerenderSummary();return}
   if(t.dataset.edit==='motion'){try{localStorage.setItem(MOTION_KEY,t.value)}catch(_){}applyMotion();stopPieSpin();toast('已更新動態效果');return}
   if(t.dataset.edit==='remainder'){S.remainderId=t.value;const b=bucketById(t.value);if(b&&b.carry===false){b.carry=true;toast(`「${b.name}」是指定罐子，已改為結轉`)}persist();render();return}
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
