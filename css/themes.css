@@ -1,0 +1,92 @@
+/* 月結算的 7 種風格。新增風格：在這裡加一個 .th-<id> 區塊，並在 js/summary.js 的 THEMES 加一筆設定 */
+/* 1. 經典 */
+.th-classic .bz{width:112px;height:112px;border-radius:50%;display:grid;place-items:center;font-family:var(--num);font-size:64px;font-weight:700;color:#fff;box-shadow:0 10px 28px rgba(10,20,30,.22)}
+.th-classic .bz.g-S{background:radial-gradient(circle at 30% 25%,#F6D365,#D4A017 60%,#A87C0B)}
+.th-classic .bz.g-A{background:radial-gradient(circle at 30% 25%,#7FD3A0,#2F7D4F 65%)}
+.th-classic .bz.g-B{background:radial-gradient(circle at 30% 25%,#8DB4E8,#3D6FB6 65%)}
+.th-classic .bz.g-C{background:radial-gradient(circle at 30% 25%,#F0A08E,#C2412D 65%)}
+.sum.th-classic .bz{animation:pop .6s cubic-bezier(.2,1.4,.4,1) both .25s}
+@keyframes pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:none}}
+
+/* 2. 手帳 */
+.th-journal{--s-bg:#F5EFE3;--s-fg:#3B3128;--s-muted:#8A7B6A;--s-card:#FBF7EF;--s-line:#E2D7C4;--s-good:#4E7A3A;--s-bad:#B03A2E;font-family:"Noto Serif TC","Songti TC",serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .th-journal{--s-bg:#25211C;--s-fg:#EDE4D6;--s-muted:#A8998A;--s-card:#2E2923;--s-line:#433B32;--s-good:#9CC27E;--s-bad:#E58A7A}}
+.th-journal .scard{border-style:dashed}
+.th-journal .bz{transform:rotate(-10deg);border:4px solid var(--gc);border-radius:14px;padding:5px;color:var(--gc)}
+.th-journal .bz .in{border:1.5px solid var(--gc);border-radius:9px;padding:6px 20px;text-align:center}
+.th-journal .bz b{display:block;font-size:56px;line-height:1;font-family:var(--num)}
+.th-journal .bz span{display:block;font-size:12px;letter-spacing:.25em;margin-top:6px}
+.sum.th-journal .bz{animation:stamp .55s cubic-bezier(.3,1.3,.5,1) both .3s}
+@keyframes stamp{0%{opacity:0;transform:scale(2.2) rotate(-10deg)}60%{opacity:1;transform:scale(.92) rotate(-10deg)}100%{transform:scale(1) rotate(-10deg)}}
+
+/* 3. 頒獎典禮 */
+.th-award{--s-bg:#2A1B07;--s-fg:#FAEEDA;--s-muted:#C9A86A;--s-card:#3A2710;--s-line:#5C4219;--s-good:#E7C55B;--s-bad:#F09595;font-family:"Noto Serif TC","Songti TC",serif}
+.th-award .sum-title{color:#FAC775}
+.th-award .bz{display:flex;flex-direction:column;align-items:center}
+.th-award .bz .disc{width:100px;height:100px;border-radius:50%;background:#FAEEDA;border:6px solid var(--gc);display:grid;place-items:center;font-family:var(--num);font-size:52px;font-weight:700;color:#4A3208}
+.th-award .bz .rib{display:flex;gap:8px;margin-top:-8px}
+.th-award .bz .rib i{display:block;width:18px;height:32px;background:#A32D2D;transform:skewX(12deg)}
+.th-award .bz .rib i+i{transform:skewX(-12deg)}
+.sum.th-award .bz{animation:drop .9s cubic-bezier(.3,1.2,.5,1) both .3s}
+@keyframes drop{0%{opacity:0;transform:translateY(-160px)}60%{opacity:1;transform:translateY(10px)}80%{transform:translateY(-4px)}100%{transform:none}}
+
+/* 4. 街機 */
+.th-arcade{--s-bg:#1B1640;--s-fg:#E8E6FF;--s-muted:#9E98D8;--s-card:#252058;--s-line:#3A3380;--s-good:#7EE0B5;--s-bad:#FF8A8A}
+.th-arcade,.th-arcade .num,.th-arcade .hero{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.th-arcade .sum-title{color:#FAC775;letter-spacing:.08em}
+.th-arcade .scard{border-radius:4px}
+.th-arcade .bz{text-align:center;color:#FAC775}
+.th-arcade .bz .lt{font-size:12px;letter-spacing:.4em;color:#AFA9EC}
+.th-arcade .bz .big{font-size:88px;font-weight:700;font-style:italic;line-height:1}
+.th-arcade .bz .stars{font-size:24px;letter-spacing:4px}
+.th-arcade .bz .stars i{font-style:normal;display:inline-block}
+.th-arcade .bz .stars i.off{opacity:.25}
+.sum.th-arcade .bz .big{animation:pop .5s cubic-bezier(.2,1.4,.4,1) both .3s}
+.sum.th-arcade .bz .stars i{animation:pop .35s cubic-bezier(.2,1.6,.4,1) both;animation-delay:calc(.7s + var(--n) * .18s)}
+
+/* 5. 集卡 */
+.th-card{--s-bg:#EEEAF8;--s-fg:#2A2342;--s-muted:#6E6690;--s-card:#F8F6FD;--s-line:#D8D1EE;--s-good:#3B7D57;--s-bad:#B5463A}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .th-card{--s-bg:#1D1A2A;--s-fg:#ECE8FA;--s-muted:#A39CC4;--s-card:#272338;--s-line:#3A3452;--s-good:#7FD3A0;--s-bad:#F09595}}
+.th-card .bz{width:104px;height:148px;border-radius:14px;border:4px solid var(--gc);background:var(--s-card);display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(4deg)}
+.th-card .bz .t{font-size:11px;color:var(--s-muted);letter-spacing:.1em}
+.th-card .bz .big{font-family:var(--num);font-size:64px;font-weight:700;color:var(--gc);line-height:1.1}
+.th-card .bz .ln{width:46px;height:4px;border-radius:2px;background:var(--gc)}
+.th-card .bz .r{font-size:12px;font-weight:700;color:var(--gc);margin-top:6px}
+.sum.th-card .bz{animation:flip .9s ease both .3s}
+@keyframes flip{0%{opacity:0;transform:perspective(600px) rotateY(180deg) scale(.6)}50%{opacity:1}100%{transform:perspective(600px) rotateY(0) rotate(4deg)}}
+
+/* 6. 極簡 */
+.th-min .scard{background:none;border-width:1px;border-radius:4px}
+.th-min .sum-title{font-weight:500;letter-spacing:.06em}
+.th-min .gtitle{color:var(--s-fg,var(--ink));font-weight:500}
+.th-min .bz{width:112px;height:112px;border-radius:50%;border:2px solid currentColor;display:grid;place-items:center}
+.th-min .bz .in{width:94px;height:94px;border-radius:50%;border:1px solid currentColor;display:grid;place-items:center;font-family:var(--num);font-size:48px;font-weight:400}
+.th-min .rankh .bar i{background:currentColor!important;opacity:.55}
+.sum.th-min .anim{animation-duration:.35s}
+
+/* 7. 街頭任務 */
+.th-street{--s-bg:#232321;--s-fg:#F1EFE8;--s-muted:#9A988F;--s-card:#2C2C2A;--s-line:#4A4945;--s-good:#97C459;--s-bad:#F09595}
+.th-street .sum-head{text-align:left}
+.th-street .sum-title{font-size:38px;line-height:1.05;color:#5DCAA5;transform:skewX(-10deg);transform-origin:left;display:inline-block}
+.th-street .sum-title.fail{color:#EF9F27}
+.th-street .slash{height:4px;width:130px;background:currentColor;color:#5DCAA5;transform:skewX(-10deg);margin-top:8px}
+.th-street .badgew{justify-content:flex-start;align-items:center;gap:12px}
+.th-street .bz{transform:skewX(-10deg);background:#EF9F27;color:#412402;font-family:var(--num);font-size:40px;font-weight:700;padding:0 18px;line-height:1.3}
+.th-street .bz.g-C{background:#F09595;color:#4A1B0C}
+.th-street .gtitle{color:#FAC775}
+.th-street .scard{border-radius:0;background:none}
+.th-street h3{letter-spacing:.2em;font-size:12px;color:var(--s-muted)}
+.th-street .rankh .no{color:#EF9F27}
+.sum.th-street::before{content:"";position:fixed;inset:0;background:#000;z-index:5;pointer-events:none;animation:blackout .5s ease both}
+@keyframes blackout{from{opacity:1}to{opacity:0;visibility:hidden}}
+:root[data-motion="reduce"] .sum.th-street::before,:root[data-motion="off"] .sum.th-street::before,.sum.th-street.still::before{display:none}
+.sum.th-street .sum-title{animation:slash .55s cubic-bezier(.2,1.2,.4,1) both .35s}
+@keyframes slash{0%{opacity:0;transform:translateX(-80px) skewX(-10deg)}70%{opacity:1;transform:translateX(8px) skewX(-10deg)}100%{transform:skewX(-10deg)}}
+.sum.th-street .sum-in{animation:shake .32s ease .9s}
+@keyframes shake{0%,100%{transform:none}25%{transform:translateX(-5px)}50%{transform:translateX(5px)}75%{transform:translateX(-2px)}}
+.sum.th-street .bz{animation:stampSk .45s cubic-bezier(.3,1.4,.5,1) both 1.05s}
+@keyframes stampSk{0%{opacity:0;transform:scale(1.9) skewX(-10deg)}100%{opacity:1;transform:skewX(-10deg)}}
+.sum.th-street .hero{animation:cash .7s ease both 1.9s}
+@keyframes cash{0%{opacity:0}40%{opacity:1;color:#fff;text-shadow:0 0 16px #97C459}100%{opacity:1}}
+.sum.th-street .anim{animation-name:slideUp}
+@keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}

@@ -1,0 +1,32 @@
+/* 總覽：月份切換、罐子、合計、各罐收支列 */
+/* jars */
+.shelf{display:flex;gap:14px;overflow-x:auto;padding:14px 2px 6px;scroll-snap-type:x mandatory}
+.jarcol{display:block;flex:1 0 96px;min-width:96px;scroll-snap-align:start;text-align:center;cursor:pointer;-webkit-user-select:none;user-select:none}
+.jar{position:relative;height:168px;margin:0 8px;border:2.5px solid var(--ink);border-radius:16px 16px 30px 30px;overflow:hidden;background:var(--surface)}
+.jar::before{content:"";position:absolute;left:14%;right:14%;top:-2px;height:10px;border:2.5px solid var(--ink);border-top:0;border-radius:0 0 8px 8px;background:var(--bg);z-index:2}
+.jar.neg{border-color:var(--neg)}
+.fill{position:absolute;left:0;right:0;bottom:0;transition:height .6s cubic-bezier(.2,.8,.2,1)}
+.fill::after{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:rgba(255,255,255,.28)}
+.jarpct{position:absolute;inset:auto 0 10px 0;font-size:13px;font-weight:600;z-index:3;color:var(--ink);mix-blend-mode:normal}
+.jarname{margin-top:10px;font-weight:700;font-size:15px}
+.jarbal{font-size:19px;font-weight:600}
+.jarbal.neg{color:var(--neg)}
+.jarsub{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.fill{transition:none}}
+
+.total{display:flex;justify-content:space-between;align-items:baseline;margin:22px 0 6px;padding:14px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.total span:first-child{color:var(--muted);font-size:14px}
+.total b{font-size:20px}
+
+h2{font-size:15px;margin:26px 0 10px;font-weight:700}
+.month-row{display:grid;gap:12px}
+.mrow .lab{display:flex;justify-content:space-between;font-size:14px;margin-bottom:5px}
+.bar{height:8px;background:var(--chip);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:4px}
+
+.mnav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 4px}
+.mnav button.arr{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;width:42px;height:40px;font-size:18px}
+.mnav button.arr:disabled{opacity:.3}
+.mlabel{position:relative;font-weight:700;font-size:18px;text-align:center;flex:1}
+.mlabel input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}
+.more{display:block;width:100%;margin-top:10px;text-align:center;background:none;border:0;color:var(--muted);font-size:14px;padding:10px}

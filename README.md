@@ -56,8 +56,39 @@
 ### 檔案結構
 
 ```
-index.html             App 本體（畫面、計算邏輯、同步）
-sw.js                  Service Worker，快取版本號由 index.html 決定
+index.html             畫面結構（約 4KB）
+sw.js                  離線快取
+
+css/
+  base.css             配色變數、版面、按鈕與表單元件、分頁列、提示訊息
+  notify.css           通知鈴鐺與通知面板
+  home.css             總覽
+  list.css             明細：紀錄列、月初結算、圓餅圖、搜尋、左滑刪除
+  sheet.css            記帳表單、計算機鍵盤、分類面板、emoji 面板
+  settings.css         設定頁
+  dev.css              開發者選項
+  summary.css          月結算的共用版面與動畫
+  themes.css           7 種結算風格
+js/
+  config.js            APP_VERSION 與 RELEASE（改版只改這個檔案）
+  state.js             共用工具、預設資料、全域狀態
+  cloud.js             Firebase 同步
+  shared-jars.js       共用罐
+  account.js           登入／登出
+  setup.js             分配模式切換、舊資料轉換、防縮放、動態效果
+  notify.js            通知鈴鐺、新版本偵測
+  init.js              啟動流程、匯出與還原備份
+  calc.js              分配、撥款、結轉與結算的計算
+  views/home.js        總覽頁
+  views/list.js        明細頁
+  views/settings.js    設定頁
+  summary.js           月結算與結算風格的設定
+  dev.js               開發者選項
+  sheet.js             底部表單、emoji 面板
+  entry.js             記一筆：計算機、分類、存檔
+  ui.js                提示訊息與左滑刪除
+  main.js              事件處理，最後啟動 App
+
 firebase-config.js     Firebase 專案設定（公開資訊，必須 push）
 firestore.rules        Firestore 安全規則（需另外貼到 Firebase 主控台）
 manifest.webmanifest   PWA 設定
@@ -128,7 +159,7 @@ invites/{email}_{jarId}            共用邀請
 
 ## 開發慣例
 
-- **版本號只改一個地方**：`index.html` 開頭的 `const APP_VERSION='vXX';`。`sw.js` 會自動使用同一個版本號，設定頁最底部也會顯示 `Bottle-keeping vXX`。
+- **版本號與更新內容**：只改 `js/config.js` 的 `APP_VERSION` 和 `RELEASE`。新增或刪除 `css/`、`js/` 的檔案時，記得同步更新 `index.html` 的載入清單和 `sw.js` 的 `CORE` 清單。
 - **Commit 訊息**：`feat: vXX，…` / `fix: vXX，…` / `chore: …`（不影響功能的維護性改動，不跳版本號）。
 - **修改 `firestore.rules` 時**，記得同步貼到 Firebase 主控台，並在 commit 內文註明。
 - **多裝置測試**：所有裝置都要更新到同一個版本。不同版本的裝置同時開著時，可能會互相覆蓋共用罐的撥款紀錄。

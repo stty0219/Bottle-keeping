@@ -1,0 +1,19 @@
+/* 通知鈴鐺與通知面板 */
+.ttl{display:flex;align-items:center;gap:6px}
+.bell{position:relative;width:38px;height:38px;border-radius:10px;border:0;background:none;color:var(--ink);display:grid;place-items:center;padding:0}
+.bell svg{width:22px;height:22px}
+.bell .dot{position:absolute;top:6px;right:7px;width:10px;height:10px;border-radius:50%;background:var(--neg);border:2px solid var(--bg);display:none}
+.bell.has .dot{display:block}
+.ntop{display:flex;justify-content:space-between;align-items:center;margin:-2px 0 6px}
+.ntop b{font-size:18px}
+.nclr{width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:none;color:var(--ink);font-size:15px}
+.upd{display:grid;gap:10px;background:var(--ink);color:var(--bg);border-radius:14px;padding:14px;margin-top:8px}
+.upd button{background:var(--bg);color:var(--ink);border:0;border-radius:10px;padding:11px;font-weight:700}
+.rel{margin-top:14px}
+.rel .rh{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--muted)}
+.rel .rh b{font-size:16px;color:var(--ink)}
+.rel ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:10px}
+.rel li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;font-size:14px;line-height:1.5}
+.ntag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;margin-top:2px}
+.ntag.new{background:#D7EFE2;color:#1E5B3A}.ntag.imp{background:#DCE7F7;color:#244C86}.ntag.fix{background:#FBE3D5;color:#8A3A14}
+.nempty{padding:26px 0;text-align:center;color:var(--muted);font-size:14px}

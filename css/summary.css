@@ -1,0 +1,67 @@
+/* 月結算：共用版面與進場動畫（各風格的配色在 themes.css） */
+/* month summary (月結算) — shared layout; each theme sets the --s-* colors */
+.g-S{--gc:#D4A017}.g-A{--gc:#2F7D4F}.g-B{--gc:#3D6FB6}.g-C{--gc:#C2412D}
+.sumbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:10px 0 0;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);font-weight:600;font-size:15px}
+.sum{position:fixed;inset:0;z-index:25;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:var(--s-bg,var(--bg));color:var(--s-fg,var(--ink))}
+.sum-in{position:relative;max-width:560px;margin:0 auto;padding:calc(10px + env(safe-area-inset-top,0px)) 18px calc(40px + env(safe-area-inset-bottom,0px))}
+.sum-top{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:4;padding-top:4px}
+.sum-x{width:40px;height:40px;border-radius:12px;border:1.5px solid var(--s-line,var(--line));background:var(--s-card,var(--surface));color:var(--s-fg,var(--ink));font-size:16px}
+.sum .note,.sum .k,.sum .s,.sum .ds,.sum .sum-prev,.sum .kick{color:var(--s-muted,var(--muted))}
+.sum-head{text-align:center;padding:4px 0 8px}
+.kick{font-size:12px;letter-spacing:.12em}
+.sum-title{font-size:21px;font-weight:700}
+.badgew{display:flex;justify-content:center;margin:18px 0 10px}
+.gtitle{font-size:15px;font-weight:700;color:var(--gc)}
+.sum-comment{font-size:16px;font-weight:600;margin-top:6px}
+.sum-prev{font-size:13px;margin-top:6px}
+.sum section{display:block;margin-top:26px}
+.sum h3{font-size:15px;margin:0 0 10px}
+.hero{font-family:var(--num);font-size:34px;font-weight:700;color:var(--s-good,#2F7D4F);line-height:1.15}
+.hero.neg{color:var(--s-bad,var(--neg))}
+.cards3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.cards2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.scard{background:var(--s-card,var(--surface));border:1.5px solid var(--s-line,var(--line));border-radius:14px;padding:12px 10px;min-width:0}
+.scard .k{font-size:12px}
+.scard .v{font-size:18px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scard .d{font-size:11.5px;margin-top:4px;line-height:1.35}
+.sum .bad{color:var(--s-bad,var(--neg))}
+.sum .good{color:var(--s-good,#2F7D4F)}
+.sum .flat{color:var(--s-muted,var(--muted))}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sum{--s-good:#6FCB93}}
+.rank{border-bottom:1px solid var(--s-line,var(--line))}
+.rankh{display:grid;grid-template-columns:26px minmax(0,1fr) auto 14px;gap:4px 10px;align-items:center;padding:9px 0;width:100%;background:none;border:0;color:inherit;text-align:left}
+.rankh .no{font-family:var(--num);font-weight:700;color:var(--s-muted,var(--muted));font-size:13px;text-align:center}
+.rankh .nm{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rankh .nm small{color:var(--s-muted,var(--muted));font-size:11px;margin-left:4px}
+.rankh .am{font-size:14px;font-weight:600;text-align:right}
+.rankh .am small{display:block;font-size:11px;color:var(--s-muted,var(--muted));font-weight:400}
+.rankh .cv{color:var(--s-muted,var(--muted));transition:transform .2s;font-size:13px}
+.rank.open .rankh .cv{transform:rotate(90deg)}
+.rankh .bar{grid-column:2/4;height:6px;background:var(--s-line,var(--chip))}
+.cdet{padding:0 0 10px 36px}
+.cdh{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--s-muted,var(--muted));margin-bottom:2px}
+.sortb{position:relative;display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;border:1px solid var(--s-line,var(--line));font-size:12px;color:var(--s-fg,var(--ink))}
+.sortb select{position:absolute;inset:0;opacity:0;width:100%;font-size:16px;cursor:pointer}
+.sortb svg{width:14px;height:14px}
+.cd{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:6px 0;border-top:1px dashed var(--s-line,var(--line));font-size:13px}
+.cd .dt{color:var(--s-muted,var(--muted));font-family:var(--num);font-size:12px}
+.cd .nt{min-width:0;overflow-wrap:anywhere}
+.cd .nt small{display:block;font-size:11px;color:var(--s-muted,var(--muted))}
+.cd .am{font-weight:600}
+.cdmore{display:block;width:100%;margin-top:4px;padding:8px;border:0;background:none;color:var(--s-muted,var(--muted));font-size:13px}
+.jrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--s-line,var(--line))}
+.jrow .nm{font-weight:600;font-size:14px}
+.jrow .st{font-size:13px;font-weight:600;text-align:right}
+.jrow .ds{font-size:12px}
+.hl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.hl .scard .v{font-size:16px}
+.hl .scard .s{font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.confetti{position:absolute;left:0;right:0;top:0;height:100vh;pointer-events:none;overflow:hidden;z-index:3}
+.confetti i{position:absolute;top:-16px;width:7px;height:12px;border-radius:2px;animation:fall 2.8s ease-in both}
+
+/* shared entrance */
+.sum .anim{animation:sumIn .5s ease both;animation-delay:calc(var(--i,0) * 200ms)}
+@keyframes sumIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes fall{from{transform:translateY(0) rotate(0)}to{transform:translateY(105vh) rotate(600deg);opacity:.3}}
+:root[data-motion="reduce"] .sum *,:root[data-motion="off"] .sum *,.sum.still *{animation:none!important}
+:root[data-motion="reduce"] .sum .confetti,:root[data-motion="off"] .sum .confetti,.sum.still .confetti{display:none}
