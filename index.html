@@ -42,7 +42,25 @@ button{cursor:pointer}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .num{font-family:var(--num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .wrap{max-width:560px;margin:0 auto;padding:18px 18px 120px}
-header.top{display:flex;align-items:baseline;justify-content:space-between;margin:4px 0 18px}
+header.top{display:flex;align-items:center;justify-content:space-between;margin:4px 0 18px}
+.ttl{display:flex;align-items:center;gap:6px}
+.bell{position:relative;width:38px;height:38px;border-radius:10px;border:0;background:none;color:var(--ink);display:grid;place-items:center;padding:0}
+.bell svg{width:22px;height:22px}
+.bell .dot{position:absolute;top:6px;right:7px;width:10px;height:10px;border-radius:50%;background:var(--neg);border:2px solid var(--bg);display:none}
+.bell.has .dot{display:block}
+.ntop{display:flex;justify-content:space-between;align-items:center;margin:-2px 0 6px}
+.ntop b{font-size:18px}
+.nclr{width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:none;color:var(--ink);font-size:15px}
+.upd{display:grid;gap:10px;background:var(--ink);color:var(--bg);border-radius:14px;padding:14px;margin-top:8px}
+.upd button{background:var(--bg);color:var(--ink);border:0;border-radius:10px;padding:11px;font-weight:700}
+.rel{margin-top:14px}
+.rel .rh{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--muted)}
+.rel .rh b{font-size:16px;color:var(--ink)}
+.rel ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:10px}
+.rel li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;font-size:14px;line-height:1.5}
+.ntag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;margin-top:2px}
+.ntag.new{background:#D7EFE2;color:#1E5B3A}.ntag.imp{background:#DCE7F7;color:#244C86}.ntag.fix{background:#FBE3D5;color:#8A3A14}
+.nempty{padding:26px 0;text-align:center;color:var(--muted);font-size:14px}
 header.top h1{font-size:22px;margin:0;font-weight:700}
 .sync{font-size:12px;color:var(--muted)}
 
@@ -444,7 +462,7 @@ li.swipe .tx{position:relative;z-index:1;background:var(--bg);transition:transfo
 </head>
 <body>
 <div class="wrap">
-  <header class="top"><h1>分罐記帳</h1><span class="sync" id="sync">載入中</span></header>
+  <header class="top"><div class="ttl"><h1>分罐記帳</h1><button class="bell" id="bell" data-action="bell" aria-label="通知"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="dot"></span></button></div><span class="sync" id="sync">載入中</span></header>
   <main id="view"></main>
 </div>
 
@@ -462,7 +480,13 @@ li.swipe .tx{position:relative;z-index:1;background:var(--bg);transition:transfo
 
 <script>
 // ===== App version: change only this line when releasing (sw.js picks it up automatically) =====
-const APP_VERSION='v23';
+const APP_VERSION='v24';
+// ===== What's new in this version (shown under the bell). Replace with the new release's notes each time. =====
+// t: 'new' 新功能 / 'imp' 改善 / 'fix' 修正
+const RELEASE={date:'2026-11-03',items:[
+  {t:'new',s:'新增通知鈴鐺：每次更新後，可以在這裡看到新版本加了什麼、修了什麼。'},
+  {t:'new',s:'App 從背景切回來時會自動檢查新版本，有新版本時，在通知裡點一下就能重新載入。'}
+]};
 const PALETTE=['#1F7A80','#D29A17','#8A4F7D','#3D6FB6','#5C8A3A','#C25B3A','#6B6F7A'];
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -897,11 +921,48 @@ function motionPref(){
 }
 function applyMotion(){document.documentElement.dataset.motion=motionPref()}
 applyMotion();
+/* ---------- notifications (鈴鐺) ---------- */
+const NOTICE_KEY='fenguan-notice',DAY=86400000;
+function notice(){try{return JSON.parse(localStorage.getItem(NOTICE_KEY))||{}}catch(e){return {}}}
+function setNotice(n){try{localStorage.setItem(NOTICE_KEY,JSON.stringify(n))}catch(e){}}
+const unseen=()=>notice().v!==APP_VERSION;                       // updated but not opened yet
+function notesVisible(){const n=notice();return n.v===APP_VERSION&&!n.cleared&&Date.now()-(n.seenAt||0)<DAY}
+let newVer=null,lastCheck=0;
+function updateBell(){const b=document.getElementById('bell');if(b){const on=unseen()||!!newVer;b.classList.toggle('has',on);b.setAttribute('aria-label',on?'通知（有新通知）':'通知')}}
+const TAGS={new:'新功能',imp:'改善',fix:'修正'};
+function noticeHtml(){
+  const notes=notesVisible();
+  let html=`<div class="ntop"><b>通知</b><button class="nclr" data-action="nclear" aria-label="清除通知並關閉">✕</button></div>`;
+  if(newVer)html+=`<div class="upd"><div>有新版本 <b>${esc(newVer)}</b> 可以更新</div><button data-action="reloadapp">點此重新載入</button></div>`;
+  if(notes){
+    const order=['new','imp','fix'],items=RELEASE.items.slice().sort((a,b)=>order.indexOf(a.t)-order.indexOf(b.t));
+    html+=`<div class="rel"><div class="rh"><b>${esc(APP_VERSION)} 更新內容</b><span>${esc(RELEASE.date)}</span></div>
+      <ul>${items.map(it=>`<li><span class="ntag ${it.t}">${TAGS[it.t]||'更新'}</span><span>${esc(it.s)}</span></li>`).join('')}</ul></div>`;
+  }
+  if(!notes&&!newVer)html+='<div class="nempty">目前沒有通知</div>';
+  return html;
+}
+function openNotice(){
+  if(unseen())setNotice({v:APP_VERSION,seenAt:Date.now(),cleared:false}); // the 24-hour clock starts on first view
+  openSheet(noticeHtml());updateBell();
+}
+// look for a newer deploy when the app comes back to the foreground (at most every 15 minutes)
+async function checkUpdate(force){
+  if(!navigator.onLine||(!force&&Date.now()-lastCheck<15*60000))return;
+  lastCheck=Date.now();
+  try{
+    const r=await fetch('./index.html',{cache:'no-store'});if(!r.ok)return;
+    const m=(await r.text()).match(/APP_VERSION='([^']+)'/);
+    if(m&&m[1]!==APP_VERSION){newVer=m[1];updateBell()}
+  }catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate()});
 function init(){
   S=loadLocal()||defaults();
   migrate();migrateJarPlan();migrateTheme();saveLocal();
   render();
   syncStatus();
+  updateBell();setTimeout(()=>checkUpdate(true),8000);
   cloudInit();
   if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js?v='+encodeURIComponent(APP_VERSION)).catch(()=>{})}
 }
@@ -2130,6 +2191,9 @@ document.addEventListener('click',e=>{
     case 'themeprev':{const mk=lastFinishedMonth();if(!mk){toast('還沒有已結束、而且有紀錄的月份可以預覽');break}openSummary(mk,el.dataset.t);break}
     case 'catx':{if(!sumState)break;const k=el.dataset.k;sumState.open.has(k)?sumState.open.delete(k):sumState.open.add(k);rerenderSummary();break}
     case 'catmore':if(sumState){sumState.all.add(el.dataset.k);rerenderSummary()}break;
+    case 'bell':openNotice();break;
+    case 'nclear':{const n=notice();if(n.v===APP_VERSION)setNotice(Object.assign(n,{cleared:true}));closeSheet();updateBell();break}
+    case 'reloadapp':location.reload();break;
     case 'summary':openSummary(listMonth);break;
     case 'sumclose':closeSummary();break;
     case 'settle':{settleOpen=!settleOpen;const s=el.closest('.settle');s.classList.toggle('open',settleOpen);el.setAttribute('aria-expanded',settleOpen);break}
