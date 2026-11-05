@@ -58,7 +58,7 @@ function sortTx(a,b){return a.date<b.date?1:a.date>b.date?-1:(b.ts||0)-(a.ts||0)
 function txRow(t){
   let ic='💵',t1='',t2='',amt='',cls='';
   if(t.type==='expense'){const c=catById(t.catId);const b=bucketById(t.bucketId);ic=c?c.emoji:'🧾';t1=c?c.name:'已刪除分類';t2=`<span class="dot" style="background:${b?b.color:'#999'}"></span>${esc(b?b.name:'—')}${t.note?'｜'+esc(t.note):''}`;amt='−'+money(t.amount)}
-  else if(t.type==='income'){t1=t.note||'收入';t2=(t.mode==='one'?'全部放入・':(S.allocMode==='amount'?'依計畫・':'依比例・'))+Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>`${esc(nameOf(k))} ${money(v)}`).join('、');amt='+'+money(t.amount);cls='in'}
+  else if(t.type==='income'){t1=t.note||'收入';t2=(t.mode==='one'?'全部放入・':'依計畫・')+Object.entries(incAlloc(t)).filter(([,v])=>v).map(([k,v])=>`${esc(nameOf(k))} ${money(v)}`).join('、');amt='+'+money(t.amount);cls='in'}
   else{ic='🔁';t1=`${nameOf(t.from)} → ${nameOf(t.to)}`;t2=t.note?esc(t.note):'罐子間轉移';amt=money(t.amount)}
   return `<li class="swipe">${delAct('p:'+t.id)}<button class="tx" data-action="tx" data-id="${t.id}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div><div class="t2">${t2}</div></span><span class="amt num ${cls}">${amt}</span></button></li>`;
 }
@@ -151,8 +151,8 @@ const searching=()=>searchTerms().length>0;
 function noteMatch(t,terms){const n=(t.note||'').toLowerCase();return terms.every(k=>n.includes(k))}
 function listView(){
   const chips=[`<button class="chip" data-action="lb" data-b="all" aria-pressed="${listBucket==='all'}">全部</button>`]
-    .concat(S.buckets.map(b=>`<button class="chip" data-action="lb" data-b="${b.id}" aria-pressed="${listBucket===b.id}"><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</button>`))
-    .concat(jarsList().map(j=>`<button class="chip" data-action="lb" data-b="${SJ+j.id}" aria-pressed="${listBucket===SJ+j.id}"><span class="dot" style="background:${j.color}"></span>${esc(j.name)}<span class="pill">共用</span></button>`)).join('');
+    .concat(shelfIds().map(id=>{if(isSJ(id)){const j=Cloud.jars[sjId(id)];return `<button class="chip" data-action="lb" data-b="${id}" aria-pressed="${listBucket===id}"><span class="dot" style="background:${j.color}"></span>${esc(j.name)}<span class="pill">共用</span></button>`}
+      const b=bucketById(id);return `<button class="chip" data-action="lb" data-b="${b.id}" aria-pressed="${listBucket===b.id}"><span class="dot" style="background:${b.color}"></span>${esc(b.name)}</button>`})).join('');
   if(isSJ(listBucket)&&!Cloud.jars[sjId(listBucket)])listBucket='all';
   return `<div style="display:grid;grid-template-columns:1fr;gap:12px">
     <input type="month" id="lm" value="${listMonth}" aria-label="選擇月份">

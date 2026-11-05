@@ -127,7 +127,7 @@ function addHtml(){
     body=`<div class="catstrip">${topCats(6).map(c=>`<button class="catchip" data-action="cat" data-id="${esc(c.key)}" aria-pressed="${d.catId===c.key}"><span class="e">${esc(c.emoji)}</span>${esc(c.name)}<span class="dot" style="background:${c.color};margin:0"></span></button>`).join('')}
       <button class="catchip all" data-action="catall">全部 ›</button></div>`;
   }else if(d.type==='income'){
-    body=`<div class="row2"><label class="f">分配方式<select id="mode"><option value="pct" ${d.mode==='pct'?'selected':''}>${S.allocMode==='amount'?'依每月計畫分配':'依比例分配'}</option><option value="one" ${d.mode==='one'?'selected':''}>全部放入一罐</option></select></label>
+    body=`<div class="row2"><label class="f">分配方式<select id="mode"><option value="pct" ${d.mode==='pct'?'selected':''}>依每月計畫分配</option><option value="one" ${d.mode==='one'?'selected':''}>全部放入一罐</option></select></label>
     <label class="f ${d.mode==='one'?'':'hidden'}" id="tgtWrap">放入<select id="tgt">${opts(d.target)}</select></label></div>`;
   }else{
     body=`<div class="row2"><label class="f">從<select id="from">${opts(d.from)}</select></label><label class="f">到<select id="to">${opts(d.to)}</select></label></div>`;

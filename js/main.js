@@ -65,7 +65,6 @@ document.addEventListener('click',e=>{
     case 'jump':listBucket=el.dataset.bucket;listCat=null;resetPie();tab='list';render();window.scrollTo(0,0);break;
     case 'lb':listBucket=el.dataset.b;listCat=null;resetPie();render();break;
     case 'color':{const b=bucketById(id);b.color=PALETTE[(PALETTE.indexOf(b.color)+1)%PALETTE.length];persist();render();break}
-    case 'allocmode':setAllocMode(el.dataset.m);break;
     case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,amt:0,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break;
     case 'delb':{
       const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id)||Object.values(S.jarPlan||{}).some(jp=>(jp.hist||[]).some(x=>x.src===id&&+x.amt>0));
@@ -101,7 +100,6 @@ document.addEventListener('input',e=>{
   }
   if(ed==='jamt'){setJarPlan(t.dataset.jid,'amt',Math.max(0,parseInt(t.value)||0));persist();return}
   if(ed==='bname')bucketById(t.dataset.id).name=t.value;
-  if(ed==='bpct'){bucketById(t.dataset.id).pct=Math.max(0,Math.min(100,parseInt(t.value)||0));const sum=targets().reduce((a,b)=>a+b.pct,0);const ps=document.querySelector('.pctsum');if(ps){ps.textContent='合計 '+sum+'%'+(sum===100?'':'，建議調整到 100%（目前會依比例換算）');ps.classList.toggle('bad',sum!==100)}}
   if(ed==='bamt'){bucketById(t.dataset.id).amt=Math.max(0,parseInt(t.value)||0);const ps=document.querySelector('#plansum b');if(ps)ps.textContent=money(planSum())}
   if(ed==='cemoji')catById(t.dataset.id).emoji=t.value;
   if(ed==='cname')catById(t.dataset.id).name=t.value;
@@ -131,7 +129,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.edit==='motion'){try{localStorage.setItem(MOTION_KEY,t.value)}catch(_){}applyMotion();stopPieSpin();toast('已更新動態效果');return}
   if(t.dataset.edit==='remainder'){S.remainderId=t.value;const b=bucketById(t.value);if(b&&b.carry===false){b.carry=true;toast(`「${b.name}」是指定罐子，已改為結轉`)}persist();render();return}
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
-  if(['bname','bpct','bamt','jamt','jname'].includes(t.dataset.edit))render();
+  if(['bname','bamt','jamt','jname'].includes(t.dataset.edit))render();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('dev')){closeDev();return}if(document.getElementById('summary')){closeSummary();return}closeSheet()}if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][data-action]')){e.preventDefault();e.target.click();return}if(e.key==='Enter'&&e.target.id==='lq'){e.preventDefault();e.target.blur();return}if(e.key==='Enter'&&e.target.id==='emocustom'){e.preventDefault();const v=lastEmoji(e.target.value);if(v)applyEmoji(v);else toast('請輸入一個 emoji');return}if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){if(draft.ok&&!hasOp(draft.expr||''))saveDraft();return}
   // physical keyboard on the calculator

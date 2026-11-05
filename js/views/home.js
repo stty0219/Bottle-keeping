@@ -66,14 +66,13 @@ function monthItems(month,filter){
 }
 function homeView(){
   const st=stats(null,listMonth);
-  const jars=S.buckets.map(b=>{
-    const s=st[b.id];
-    const sub=carries(b)?'會結轉':'每月歸零';
-    return jarCol(b.id,b.name,b.color,s,sub,false)}).join('');
-  const shared=jarsList();
-  const sjars=shared.map(j=>{const s=jarStats(j.id,listMonth);return jarCol(SJ+j.id,j.name,j.color,s,`${(j.members||[]).length} 人共用`,true)}).join('');
+  const order=shelfIds(),shared=jarsList();
+  const jars=order.map(id=>{
+    if(isSJ(id)){const j=Cloud.jars[sjId(id)];return jarCol(id,j.name,j.color,jarStats(sjId(id),listMonth),`${(j.members||[]).length} 人共用`,true)}
+    const b=bucketById(id);return jarCol(b.id,b.name,b.color,st[b.id],carries(b)?'會結轉':'每月歸零',false)}).join('');
+  const sjars='';
   const total=S.buckets.reduce((a,b)=>a+st[b.id].bal,0);
-  const monthRows=S.buckets.map(b=>monthRow(b.name,b.color,st[b.id],false)).join('')+shared.map(j=>monthRow(j.name,j.color,jarStats(j.id,listMonth),true,j.id)).join('');
+  const monthRows=order.map(id=>{if(isSJ(id)){const j=Cloud.jars[sjId(id)];return monthRow(j.name,j.color,jarStats(sjId(id),listMonth),true,sjId(id))}const b=bucketById(id);return monthRow(b.name,b.color,st[b.id],false)}).join('');
   const own=S.txns.filter(t=>t.type==='expense'&&t.date.slice(0,7)===listMonth).reduce((a,t)=>a+t.amount,0),sm=sharedMonth(listMonth);
   const items=monthItems(listMonth,'all');
   const isNow=listMonth===curMonth();

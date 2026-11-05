@@ -35,6 +35,7 @@ const CORE=[
   './js/sheet.js',
   './js/entry.js',
   './js/ui.js',
+  './js/reorder.js',
   './js/main.js'
 ];
 // 只快取 App 本身、字型和 Firebase SDK；Firebase 的登入與資料連線一律直接走網路

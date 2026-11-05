@@ -1,7 +1,7 @@
 // 啟動流程、匯出／還原備份、匯出 CSV（init() 在 main.js 最後呼叫）
 function init(){
   S=loadLocal()||defaults();
-  migrate();migrateJarPlan();migrateTheme();saveLocal();
+  migrate();migrateAlloc();migrateJarPlan();migrateTheme();saveLocal();
   render();
   syncStatus();
   updateBell();setTimeout(()=>checkUpdate(true),8000);

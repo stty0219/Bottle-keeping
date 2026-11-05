@@ -53,7 +53,7 @@ async function cloudConnect(){
     const q=await col.where('members','array-contains',u.uid).get();
     if(q.empty){
       const ref=col.doc();
-      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules||null,sumTheme:S.sumTheme||null,themeText:S.themeText?clean(S.themeText):null,
+      await ref.set({name:'我的帳本',owner:u.uid,members:[u.uid],buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'amount',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules||null,shelfOrder:S.shelfOrder||null,sumTheme:S.sumTheme||null,themeText:S.themeText?clean(S.themeText):null,
         createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
       await writeTxns(ref,S.txns);
       lid=ref.id;toast('已把這台裝置的資料上傳到雲端');
@@ -81,8 +81,8 @@ function subscribe(ref){
     if(!snap.exists){fail({code:'permission-denied'});return}
     if(snap.metadata.hasPendingWrites)return;
     const d=snap.data();
-    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.jarPlan=d.jarPlan||{};S.gradeRules=d.gradeRules||null;S.gradeComments=d.gradeComments||null;S.sumTheme=d.sumTheme||null;S.themeText=d.themeText||null;S.ledgerName=d.name||'我的帳本';
-    const mig=migrateJarPlan()|migrateTheme();saveLocal();safeRender();if(mig)persist();
+    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.jarPlan=d.jarPlan||{};S.gradeRules=d.gradeRules||null;S.gradeComments=d.gradeComments||null;S.sumTheme=d.sumTheme||null;S.shelfOrder=d.shelfOrder||null;S.themeText=d.themeText||null;S.ledgerName=d.name||'我的帳本';
+    const mig=migrateAlloc()|migrateJarPlan()|migrateTheme();saveLocal();safeRender();if(mig)persist();
     if(!Cloud.ledgerLoaded){Cloud.ledgerLoaded=true;startJars()}
     scheduleMirror();
   },fail));
@@ -109,7 +109,7 @@ function persist(){ // buckets & categories
   if(!cloudOn())return;
   clearTimeout(Cloud.metaTimer);
   Cloud.metaTimer=setTimeout(()=>{
-    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'pct',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),gradeRules:S.gradeRules?clean(S.gradeRules):null,sumTheme:S.sumTheme||null,themeText:S.themeText?clean(S.themeText):null,gradeComments:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'amount',remainderId:S.remainderId||null,jarPlan:clean(S.jarPlan||{}),shelfOrder:S.shelfOrder||null,gradeRules:S.gradeRules?clean(S.gradeRules):null,sumTheme:S.sumTheme||null,themeText:S.themeText?clean(S.themeText):null,gradeComments:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
       .catch(e=>{Cloud.err='設定沒有存到雲端：'+(e.message||e.code);renderIfSettings()});
     syncStatus();scheduleMirror();
   },600);
@@ -125,7 +125,7 @@ function removeTxn(id){
 }
 async function replaceAll(data){ // import / reset
   const keep={ledgerId:S.ledgerId,ledgerOwner:S.ledgerOwner,ledgerName:S.ledgerName};
-  S=Object.assign(data,keep);migrate();saveLocal();render();
+  S=Object.assign(data,keep);migrate();migrateAlloc();saveLocal();render();
   if(cloudOn()){
     setSync('同步中…');
     try{await deleteAllTxns(Cloud.ref);await writeTxns(Cloud.ref,S.txns);persist()}

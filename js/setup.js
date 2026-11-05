@@ -1,15 +1,12 @@
 // 分配模式切換、舊資料轉換、防止縮放、動態效果設定
-function setAllocMode(m){
-  if(S.allocMode===m||(m==='pct'&&!S.allocMode))return;
-  let filled=false;
-  if(m==='amount'&&planSum()===0){ // first switch: suggest amounts from the latest month's income
-    const pt=planTotals(),mk=Object.keys(pt).sort().pop(),T=mk?pt[mk]:0;
-    const tot=targets().reduce((a,b)=>a+b.pct,0)||1;
-    if(T>0){S.buckets.forEach(b=>b.amt=Math.round(T*(+b.pct||0)/tot/100)*100);filled=true}
-    if(!bucketById(S.remainderId))S.remainderId=(S.buckets.find(b=>/彈性/.test(b.name))||S.buckets[S.buckets.length-1]).id;
+function migrateAlloc(){ // v26: only monthly amounts remain; an old percentage ledger (or old backup) is converted once
+  if(S.allocMode==='amount')return false;
+  if(!S.buckets.some(b=>+b.amt>0)){
+    const pt=planTotals(),mk=Object.keys(pt).sort().pop(),T=mk?pt[mk]:0,tot=S.buckets.reduce((a,b)=>a+(+b.pct||0),0)||1;
+    if(T>0)S.buckets.forEach(b=>b.amt=Math.round(T*(+b.pct||0)/tot/100)*100);
   }
-  S.allocMode=m;persist();render();
-  if(filled)toast('已依最近一個月的收入先填入建議金額，可以再調整');
+  if(!bucketById(S.remainderId)){const r=S.buckets.find(b=>/彈性/.test(b.name))||S.buckets[S.buckets.length-1];S.remainderId=r?r.id:null}
+  S.allocMode='amount';return true;
 }
 function migrate(){
   for(const t of S.txns){

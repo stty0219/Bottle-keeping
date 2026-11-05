@@ -4,7 +4,7 @@ const FV=()=>firebase.firestore.FieldValue;
 const myUid=()=>Cloud.user&&Cloud.user.uid;
 const myEmail=()=>((Cloud.user&&Cloud.user.email)||'').toLowerCase();
 const myName=()=>(Cloud.user&&(Cloud.user.displayName||(Cloud.user.email||'').split('@')[0]))||'我';
-const jarsList=()=>Object.keys(Cloud.jars).map(id=>Object.assign({id},Cloud.jars[id])).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+const jarsList=()=>{const pos=shelfPos();return Object.keys(Cloud.jars).map(id=>Object.assign({id},Cloud.jars[id])).sort((a,b)=>(pos[SJ+a.id]??1e9)-(pos[SJ+b.id]??1e9))}; // overview order
 const isMirror=t=>t.kind==='contrib'||(t.id||'').startsWith('m_');
 function nameOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return (j?j.name:((S.jarPlan||{})[sjId(id)]||{}).name||'共用罐')+'（共用）'}const b=bucketById(id);return b?b.name:'—'}
 function colorOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return j?j.color:'#999'}const b=bucketById(id);return b?b.color:'#999'}

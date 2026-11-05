@@ -30,3 +30,10 @@ h2{font-size:15px;margin:26px 0 10px;font-weight:700}
 .mlabel{position:relative;font-weight:700;font-size:18px;text-align:center;flex:1}
 .mlabel input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}
 .more{display:block;width:100%;margin-top:10px;text-align:center;background:none;border:0;color:var(--muted);font-size:14px;padding:10px}
+
+/* 拖拉排序（總覽長按） */
+.jarcol{-webkit-touch-callout:none}
+.shelf.sorting{scroll-snap-type:none}
+.sortitem{transition:transform .18s ease}
+.sortitem.lifted{transition:none;position:relative;z-index:5}
+.jarcol.lifted .jar{box-shadow:0 12px 26px rgba(10,20,30,.28)}
