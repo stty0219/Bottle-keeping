@@ -37,6 +37,7 @@ document.addEventListener('click',e=>{
     case 'reloadapp':location.reload();break;
     case 'summary':openSummary(listMonth);break;
     case 'sumclose':closeSummary();break;
+    case 'cover':{coverOpen=!coverOpen;const s=el.closest('.settle');s.classList.toggle('open',coverOpen);el.setAttribute('aria-expanded',coverOpen);break}
     case 'settle':{settleOpen=!settleOpen;const s=el.closest('.settle');s.classList.toggle('open',settleOpen);el.setAttribute('aria-expanded',settleOpen);break}
     case 'qclear':{listQuery='';const i=document.getElementById('lq');if(i){i.value='';i.focus()}document.getElementById('sbox').classList.add('empty');refreshResults();break}
     case 'qall':listAllMonths=!listAllMonths;el.setAttribute('aria-pressed',listAllMonths);refreshResults();break;

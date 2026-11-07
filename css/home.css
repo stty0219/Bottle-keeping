@@ -37,3 +37,7 @@ h2{font-size:15px;margin:26px 0 10px;font-weight:700}
 .sortitem{transition:transform .18s ease}
 .sortitem.lifted{transition:none;position:relative;z-index:5}
 .jarcol.lifted .jar{box-shadow:0 12px 26px rgba(10,20,30,.28)}
+
+/* 超支墊付 */
+.jarsub.bad{color:var(--neg);font-weight:600}
+.mrow .neg{color:var(--neg);font-weight:600}

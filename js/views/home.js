@@ -17,11 +17,11 @@ function monthNav(){
 function jarCol(id,name,color,s,sub,shared){
   const avail=Math.max(0,s.open)+s.monthIn,ratio=avail>0?Math.max(0,Math.min(1,s.bal/avail)):0;
   return `<div class="jarcol" role="button" tabindex="0" data-action="jump" data-bucket="${id}" aria-label="${esc(name)}，月底餘額 ${money(s.bal)}">
-    <div class="jar ${s.bal<0?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${color}"></div>
+    <div class="jar ${s.bal<0||s.over?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${color}"></div>
     <div class="jarpct num">${avail>0?Math.round(ratio*100)+'%':'空'}</div></div>
     <div class="jarname">${esc(name)}${shared?'<span class="pill">共用</span>':''}</div>
     <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
-    <div class="jarsub">${sub}</div></div>`;
+    <div class="jarsub ${s.over?'bad':''}">${sub}</div></div>`;
 }
 // my share of a shared expense: split by the member count when it was recorded
 function myShare(t){const n=t.split||((Cloud.jars[t.jid]||{}).members||[]).length||1;return Math.round(t.amount/n)}
@@ -35,7 +35,7 @@ function monthRow(name,color,s,shared,jid){
   const spent=s.monthOut-(s.monthJar||0),used=s.monthOut,base=Math.max(avail,used,1);
   let lab;
   if(shared){const sm=jarShare(jid,listMonth);lab=`共用支出 ${money(s.monthOut)}（你的份額 ${money(sm)}）／ 可用 ${money(avail)}`}
-  else lab=`花了 ${money(spent)}${s.monthJar?`・撥共用 ${money(s.monthJar)}`:''} ／ 可用 ${money(avail)}`;
+  else lab=`花了 ${money(spent)}${s.monthJar?`・撥共用 ${money(s.monthJar)}`:''} ／ 可用 ${money(avail)}${s.over?`<br><span class="neg">超支 ${money(s.over)} 由${esc(remainderBucket().name)}墊付</span>`:''}${s.covered?`<br><span class="note">已墊付超支 ${money(s.covered)}</span>`:''}`;
   const jarW=s.monthJar?Math.min(100,s.monthJar/base*100):0,spW=Math.min(100-jarW,Math.max(0,spent)/base*100);
   return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">${lab}</span></div>
   <div class="bar" style="display:flex">${jarW?`<i style="width:${jarW}%;background:${color};opacity:.45;border-radius:4px 0 0 4px"></i>`:''}<i style="width:${spW}%;background:${used>avail?'var(--neg)':color};${jarW?'border-radius:0 4px 4px 0':''}"></i></div></div>`;
@@ -69,7 +69,9 @@ function homeView(){
   const order=shelfIds(),shared=jarsList();
   const jars=order.map(id=>{
     if(isSJ(id)){const j=Cloud.jars[sjId(id)];return jarCol(id,j.name,j.color,jarStats(sjId(id),listMonth),`${(j.members||[]).length} 人共用`,true)}
-    const b=bucketById(id);return jarCol(b.id,b.name,b.color,st[b.id],carries(b)?'會結轉':'每月歸零',false)}).join('');
+    const b=bucketById(id),s=st[b.id];
+    const sub=s.over?`超支 ${money(s.over)}`:s.covered?`已墊付 ${money(s.covered)}`:carries(b)?'會結轉':'每月歸零';
+    return jarCol(b.id,b.name,b.color,s,sub,false)}).join('');
   const sjars='';
   const total=S.buckets.reduce((a,b)=>a+st[b.id].bal,0);
   const monthRows=order.map(id=>{if(isSJ(id)){const j=Cloud.jars[sjId(id)];return monthRow(j.name,j.color,jarStats(sjId(id),listMonth),true,sjId(id))}const b=bucketById(id);return monthRow(b.name,b.color,st[b.id],false)}).join('');
