@@ -18,7 +18,7 @@ function jarCol(id,name,color,s,sub,shared){
   const avail=Math.max(0,s.open)+s.monthIn,ratio=avail>0?Math.max(0,Math.min(1,s.bal/avail)):0;
   return `<div class="jarcol" role="button" tabindex="0" data-action="jump" data-bucket="${id}" aria-label="${esc(name)}，月底餘額 ${money(s.bal)}">
     <div class="jar ${s.bal<0||s.over?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${color}"></div>
-    <div class="jarpct num">${avail>0?Math.round(ratio*100)+'%':'空'}</div></div>
+    <div class="jarpct num" ${ratio>0.12?`style="color:${textOn(color)}"`:''}>${avail>0?Math.round(ratio*100)+'%':'空'}</div></div>
     <div class="jarname">${esc(name)}${shared?'<span class="pill">共用</span>':''}</div>
     <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
     <div class="jarsub ${s.over?'bad':''}">${sub}</div></div>`;

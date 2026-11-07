@@ -19,6 +19,8 @@ document.addEventListener('click',e=>{
     case 'tx':openTx(id);break;
     case 'stx':openShared(el.dataset.jid,id);break;
     case 'swdel':swipeDelete(el.dataset.ref);break;
+    case 'colorpick':openColor(id,el.dataset.jid);break;
+    case 'cset':applyColor(el.dataset.c,false);break;
     case 'vertap':verTap();break;
     case 'devopen':openDev('home');break;
     case 'devgo':devView=el.dataset.v;devRender();break;
@@ -56,7 +58,6 @@ document.addEventListener('click',e=>{
     case 'rmmember':removeMember(el.dataset.jid,id);break;
     case 'verify':sendVerify();break;
     case 'verified':checkVerified();break;
-    case 'jcolor':{const j=Cloud.jars[el.dataset.jid];if(!j)break;j.color=PALETTE[(PALETTE.indexOf(j.color)+1)%PALETTE.length];saveJarMeta(el.dataset.jid,['color']);render();break}
     case 'jaddc':{const j=Cloud.jars[el.dataset.jid];if(!j)break;j.categories=(j.categories||[]).concat([{id:uid(),emoji:'🏷️',name:'新分類'}]);saveJarMeta(el.dataset.jid,['categories']);render();break}
     case 'jdelc':{const j=Cloud.jars[el.dataset.jid];if(!j)break;j.categories=(j.categories||[]).filter(c=>c.id!==id);saveJarMeta(el.dataset.jid,['categories']);render();break}
     case 'deltx':if(!confirm('確定刪除這筆紀錄？'))break;removeTxn(id);closeSheet();render();toast('已刪除');break;
@@ -65,7 +66,6 @@ document.addEventListener('click',e=>{
     case 'pie':{const k=el.dataset.key;if(listBucket==='all'){listBucket=k;listCat=null;resetPie()}else listCat=listCat===k?null:k;render();break}
     case 'jump':listBucket=el.dataset.bucket;listCat=null;resetPie();tab='list';render();window.scrollTo(0,0);break;
     case 'lb':listBucket=el.dataset.b;listCat=null;resetPie();render();break;
-    case 'color':{const b=bucketById(id);b.color=PALETTE[(PALETTE.indexOf(b.color)+1)%PALETTE.length];persist();render();break}
     case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,amt:0,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break;
     case 'delb':{
       const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id)||Object.values(S.jarPlan||{}).some(jp=>(jp.hist||[]).some(x=>x.src===id&&+x.amt>0));
@@ -85,6 +85,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='lq'){listQuery=t.value;document.getElementById('sbox').classList.toggle('empty',!t.value);refreshResults();return}
+  if(t.dataset.edit==='colorpick'){previewColor(t.value);return}
   if(t.id==='emocustom'){const v=lastEmoji(t.value);if(t.value!==v)t.value=v;return}
   if(t.dataset.edit==='gc'){const u=ensureThemeText(t.dataset.t);u.comments[t.dataset.g][+t.dataset.i]=t.value;persist();return}
   if(t.dataset.edit==='tt'){const u=ensureThemeText(t.dataset.t);u.titles[t.dataset.g]=t.value;persist();return}
@@ -126,6 +127,7 @@ document.addEventListener('change',e=>{
       if(k==='aRate'&&r.aRate>r.sRate){r.aRate=r.sRate;toast('A 的門檻不能高於 S，已調整為相同')}
       if(k==='sRate'&&r.aRate>r.sRate){r.aRate=r.sRate;toast('A 的門檻已一併調低，不能高於 S')}}
     S.gradeRules=r;persist();devRender(true);return}
+  if(t.dataset.edit==='colorpick'){applyColor(t.value,true);return}
   if(t.dataset.edit==='sumsort'){try{localStorage.setItem(SORT_KEY,t.value)}catch(_){}rerenderSummary();return}
   if(t.dataset.edit==='motion'){try{localStorage.setItem(MOTION_KEY,t.value)}catch(_){}applyMotion();stopPieSpin();toast('已更新動態效果');return}
   if(t.dataset.edit==='remainder'){S.remainderId=t.value;const b=bucketById(t.value);if(b&&b.carry===false){b.carry=true;toast(`「${b.name}」是指定罐子，已改為結轉`)}persist();render();return}

@@ -33,6 +33,7 @@ const CORE=[
   './js/summary.js',
   './js/dev.js',
   './js/sheet.js',
+  './js/color.js',
   './js/entry.js',
   './js/ui.js',
   './js/reorder.js',

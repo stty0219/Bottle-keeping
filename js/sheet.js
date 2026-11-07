@@ -62,7 +62,7 @@ function applyEmoji(e){
 function closeSheet(){
   const sh=document.getElementById('sheet'),sc=document.getElementById('scrim');
   sh.style.transition='';sh.style.transform='';sc.style.opacity='';
-  sc.classList.remove('open');sh.classList.remove('open');draft=null;emoTarget=null;unlockScroll();
+  sc.classList.remove('open');sh.classList.remove('open');draft=null;emoTarget=null;colorTarget=null;unlockScroll();
 }
 /* drag the top of the sheet down to dismiss */
 (function(){
