@@ -12,7 +12,7 @@ function defaults(){
     c('🍱','餐飲',day),c('🚌','交通',day),c('🛒','日用品',day),c('🏠','居住',day),c('📱','電信',day),
     c('📈','股票/ETF',inv),c('🏦','儲蓄',inv),
     c('🎬','娛樂',flex),c('✈️','旅遊',flex),c('🛍️','購物',flex),c('🎁','禮物',flex)
-  ],txns:[]};
+  ],txns:[],myColors:[]};
 }
 
 let S=null;               // state

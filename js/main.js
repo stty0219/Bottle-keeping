@@ -20,7 +20,11 @@ document.addEventListener('click',e=>{
     case 'stx':openShared(el.dataset.jid,id);break;
     case 'swdel':swipeDelete(el.dataset.ref);break;
     case 'colorpick':openColor(id,el.dataset.jid);break;
-    case 'cset':applyColor(el.dataset.c,false);break;
+    case 'cset':if(!colorUI.edit)applyColor(el.dataset.c);break;
+    case 'cuse':applyColor(colorUI.custom);break;
+    case 'cadd':addMyColor();break;
+    case 'cedit':toggleColorEdit();break;
+    case 'cdel':delMyColor(el.dataset.c);break;
     case 'vertap':verTap();break;
     case 'devopen':openDev('home');break;
     case 'devgo':devView=el.dataset.v;devRender();break;
@@ -127,7 +131,7 @@ document.addEventListener('change',e=>{
       if(k==='aRate'&&r.aRate>r.sRate){r.aRate=r.sRate;toast('A 的門檻不能高於 S，已調整為相同')}
       if(k==='sRate'&&r.aRate>r.sRate){r.aRate=r.sRate;toast('A 的門檻已一併調低，不能高於 S')}}
     S.gradeRules=r;persist();devRender(true);return}
-  if(t.dataset.edit==='colorpick'){applyColor(t.value,true);return}
+  if(t.dataset.edit==='colorpick'){previewColor(t.value);return} // iPhone fires change mid-adjustment: only preview, the buttons apply / save
   if(t.dataset.edit==='sumsort'){try{localStorage.setItem(SORT_KEY,t.value)}catch(_){}rerenderSummary();return}
   if(t.dataset.edit==='motion'){try{localStorage.setItem(MOTION_KEY,t.value)}catch(_){}applyMotion();stopPieSpin();toast('已更新動態效果');return}
   if(t.dataset.edit==='remainder'){S.remainderId=t.value;const b=bucketById(t.value);if(b&&b.carry===false){b.carry=true;toast(`「${b.name}」是指定罐子，已改為結轉`)}persist();render();return}
