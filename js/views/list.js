@@ -25,6 +25,24 @@ function sysItems(month,filter){
   return rows;
 }
 // 月初結算: collapsed to one net line, expand for the individual carry-overs and settlements
+let coverOpen=false;
+function coverItems(month,filter){ // this month's overspending covered by the designated jar
+  const rem=remainderBucket();if(!rem)return [];
+  const s=stats(null,month)[rem.id]||{},rows=[];
+  for(const p of (s.coverParts||[])){
+    if(filter!=='all'&&filter!==rem.id&&filter!==p.id)continue;
+    const b=bucketById(p.id);if(!b)continue;
+    rows.push({sys:true,id:'cov_'+p.id,date:month+'-01',amount:-p.amount,color:b.color,jar:`由${rem.name}墊付`,label:`${b.name}超支`});
+  }
+  return rows;
+}
+function coverHtml(rows){
+  if(!rows.length)return '';
+  const total=rows.reduce((a,r)=>a-r.amount,0);
+  return `<div class="settle ${coverOpen?'open':''}"><button class="settle-h" data-action="cover" aria-expanded="${coverOpen}">
+      <span class="lbl">本月超支墊付</span><span class="net num">共 <b class="neg">${money(total)}</b><span class="chev">›</span></span></button>
+    <ul class="txs settle-list">${rows.map(sysRow).join('')}</ul></div>`;
+}
 let settleOpen=false;
 function settleHtml(rows){
   if(!rows.length)return '';
@@ -172,6 +190,7 @@ function listResultsHtml(){
   let shown=listCat?items.filter(t=>catOf(t)===listCat):items;
   if(q)shown=shown.filter(t=>noteMatch(t,terms));
   const sys=(!q&&!listCat)?sysItems(listMonth,listBucket):[];
+  const covs=(!q&&!listCat&&!isSJ(listBucket))?coverItems(listMonth,listBucket):[];
   let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,toJar=0;
   for(const t of items){
     if(t.jid){
@@ -203,7 +222,7 @@ function listResultsHtml(){
       ?`共用支出 <b>${money(shOut)}</b>（你的份額 ${money(shMine)}）<br>撥入 <b>${money(sumIn)}</b>`
       :`個人支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${toJar?`<br>撥到共用罐 ${money(toJar)}`:''}${shOut?`<br>共用支出 ${money(shOut)}（你的份額 <b>${money(shMine)}</b>）`:''}`}</span></div>`;
   const empty=q?`<div class="empty">${all?'所有月份':'這個月'}沒有符合「${esc(listQuery.trim())}」的紀錄。${all?'':'<br>可以切換到「所有月份」試試看。'}</div>`:'<div class="empty">這個月還沒有紀錄。</div>';
-  return `${settleHtml(sys)}${totalLine}
+  return `${settleHtml(sys)}${coverHtml(covs)}${totalLine}
     ${q?'':pieHtml()}
     ${listCat?`<button class="catfilter" data-action="pie" data-key="${esc(listCat)}">只看：${esc(catLabel)}　✕</button>`:''}
     ${html||empty}`;

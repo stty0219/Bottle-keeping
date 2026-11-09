@@ -183,7 +183,7 @@ function sharedHtml(){
       <input type="text" value="${esc(c.name)}" data-edit="jcname" data-jid="${j.id}" data-id="${c.id}" aria-label="分類名稱">
       <button class="icon-btn" data-action="jdelc" data-jid="${j.id}" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
     return `<div class="acct jarcard">
-      <div class="jhead"><button class="swatch" style="background:${j.color}" ${owner?`data-action="jcolor" data-jid="${j.id}"`:'disabled'} aria-label="換顏色"></button>
+      <div class="jhead"><button class="swatch" style="background:${j.color}" ${owner?`data-action="colorpick" data-jid="${j.id}"`:'disabled'} aria-label="換顏色"></button>
         <input type="text" value="${esc(j.name)}" data-edit="jname" data-jid="${j.id}" ${owner?'':'disabled'} aria-label="共用罐名稱"><span class="pill">共用</span></div>
       ${(()=>{const e=jarEff(jp,curMonth())||{amt:0,src:defaultSrc()};
         return `<div class="row2" style="margin-top:0"><label class="f">資金來源<select data-edit="jsrc" data-jid="${j.id}">${S.buckets.map(b=>`<option value="${b.id}" ${b.id===e.src?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>

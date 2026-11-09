@@ -147,7 +147,10 @@ function updateHint(){
   if(d.type==='expense'){
     const c=resolveCat(d.catId);ok=ok&&!!c;
     if(c){const id=c.shared?SJ+c.jid:c.bucketId;const after=(c.shared?jarStats(c.jid,mk,exShared).bal:balanceOf(id,mk,d.editId))-amt;
-      msg=`從「<b>${esc(nameOf(id))}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
+      const b=!c.shared&&bucketById(id),rem=remainderBucket();
+      if(b&&after<0&&!carries(b)&&rem&&rem.id!==b.id)
+        msg=`「<b>${esc(b.name)}</b>」只剩 ${money(after+amt)}，超出的 <span class="neg">${money(-after)}</span> 會由「<b>${esc(rem.name)}</b>」墊付`;
+      else msg=`從「<b>${esc(nameOf(id))}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
     else msg='選一個分類';
   }else if(d.type==='income'){
     if(amt>0){

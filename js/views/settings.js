@@ -2,7 +2,7 @@
 function settingsView(){
   const bl=S.buckets.map(b=>`<div class="set-item amt-mode brow" data-id="${b.id}">
     <span class="dh" data-drag="bucket" aria-label="按住拖拉調整順序" title="按住拖拉調整順序">≡</span>
-    <button class="swatch" style="background:${b.color}" data-action="color" data-id="${b.id}" aria-label="換顏色"></button>
+    <button class="swatch" style="background:${b.color}" data-action="colorpick" data-id="${b.id}" aria-label="換顏色"></button>
     <input type="text" value="${esc(b.name)}" data-edit="bname" data-id="${b.id}" aria-label="罐子名稱">
     <input type="number" inputmode="numeric" min="0" step="100" value="${+b.amt||0}" data-edit="bamt" data-id="${b.id}" aria-label="每月金額">
     <button class="icon-btn" data-action="delb" data-id="${b.id}" aria-label="刪除罐子">✕</button>

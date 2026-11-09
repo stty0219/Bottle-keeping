@@ -87,19 +87,24 @@ function stats(excludeId,month){
   for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk],mk);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
   for(const jid in (S.jarPlan||{})){const jp=S.jarPlan[jid];
     for(let mk=jp.from||month;mk<=month;mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);if(c){add(c.src,mk,'o',c.amt);add(c.src,mk,'j',c.amt)}}}
-  // walk month by month: carrying jars keep their balance; reset jars settle at month end into the designated jar
+  // walk month by month: carrying jars keep their balance; a reset jar's overspending is covered right away by the
+  // designated jar (墊付), and whatever a reset jar has left is swept into the designated jar at month end
   const rem=remainderBucket();
   const months=new Set([month]);for(const id in per)for(const mk in per[id])months.add(mk);
   const bal={},out={};S.buckets.forEach(b=>bal[b.id]=0);
   let lastSweep=0,lastParts=[],lastMk=null;
   for(const mk of [...months].sort()){
-    const isTarget=mk===month;
-    for(const b of S.buckets){
-      const cur=per[b.id][mk]||{i:0,o:0,j:0};
-      if(isTarget)out[b.id]={open:bal[b.id],monthIn:cur.i,monthOut:cur.o,monthJar:cur.j,bal:bal[b.id]+cur.i-cur.o,sweep:0};
-      bal[b.id]+=cur.i-cur.o;
+    const isTarget=mk===month,open={};
+    for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0};open[b.id]=bal[b.id];bal[b.id]+=cur.i-cur.o}
+    let cov=0;const covParts=[];
+    if(rem)for(const b of S.buckets)if(!carries(b)&&b.id!==rem.id&&bal[b.id]<0){const c=-bal[b.id];bal[b.id]=0;cov+=c;covParts.push({id:b.id,amount:c})}
+    if(rem)bal[rem.id]-=cov;
+    if(isTarget){
+      for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0};
+        out[b.id]={open:open[b.id],monthIn:cur.i,monthOut:cur.o,monthJar:cur.j,bal:bal[b.id],sweep:0,over:(covParts.find(p=>p.id===b.id)||{}).amount||0}}
+      if(rem){out[rem.id].covered=cov;out[rem.id].coverParts=covParts}
+      break;
     }
-    if(isTarget)break;
     let sweep=0;const parts=[];
     for(const b of S.buckets){if(!carries(b)){if(bal[b.id])parts.push({id:b.id,amount:bal[b.id]});sweep+=bal[b.id];bal[b.id]=0}}
     if(rem)bal[rem.id]+=sweep;

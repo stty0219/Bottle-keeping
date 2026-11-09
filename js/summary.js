@@ -110,10 +110,11 @@ function monthData(mk){
   const spend=exps.reduce((a,e)=>a+e.amount,0);
   const cats={};for(const e of exps){const g=cats[e.key]||(cats[e.key]={key:e.key,name:e.name,emoji:e.emoji,shared:e.shared,value:0,count:0,n:0});g.value+=e.amount;g.n++;if(e.mine)g.count++}
   const st=stats(null,mk);
-  const jars=S.buckets.map(b=>{const s=st[b.id]||{open:0,monthIn:0,monthOut:0,bal:0};return {name:b.name,color:b.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut,bal:s.bal}});
+  const jars=S.buckets.map(b=>{const s=st[b.id]||{open:0,monthIn:0,monthOut:0,bal:0};return {name:b.name,color:b.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut,bal:s.bal,over:s.over||0,covered:s.covered||0}});
   const sjars=jarsList().map(j=>{const s=jarStats(j.id,mk);return {name:j.name,color:j.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut,bal:s.bal,shared:true}});
   return {mk,inc,spend,net:inc-spend,exps,cats:Object.values(cats).sort((a,b)=>b.value-a.value),jars,sjars,
-    over:jars.filter(j=>j.bal<0).length,has:inc>0||spend>0};
+    over:jars.filter(j=>j.bal<0||j.over>0).length, // a reset jar covered by the designated jar still counts as overspent
+has:inc>0||spend>0};
 }
 function gradeOf(d){
   const r=gradeRules();
@@ -186,8 +187,8 @@ function summaryHtml(mk,tid){
       ${open?catDetail(d,c.key):''}</div>`}).join(''):'<div class="empty" style="padding:12px 0">這個月沒有支出。</div>'}</section>`;
   // jars
   const jr=j=>`<div class="jrow"><span class="nm"><span class="dot" style="background:${j.color}"></span>${esc(j.name)}${j.shared?'<span class="pill">共用</span>':''}</span>
-    <span class="st ${j.bal<0?'bad':'good'}">${j.bal<0?L.jarBad(-j.bal):L.jarOk(j.bal)}</span>
-    <span class="ds num">花了 ${money(j.spent)} ／ 可用 ${money(j.avail)}</span></div>`;
+    <span class="st ${j.bal<0||j.over?'bad':'good'}">${j.over?L.jarBad(j.over)+`（${esc(remainderBucket().name)}墊付）`:j.bal<0?L.jarBad(-j.bal):L.jarOk(j.bal)}</span>
+    <span class="ds num">花了 ${money(j.spent)} ／ 可用 ${money(j.avail)}${j.covered?`・墊付超支 ${money(j.covered)}`:''}</span></div>`;
   html+=`<section class="${A()}"><h3>${L.jars}</h3>${d.jars.map(jr).join('')}${d.sjars.map(jr).join('')}
     ${d.sjars.length?'<p class="note" style="margin:8px 0 0">共用罐不列入你的評等。</p>':''}</section>`;
   // highlights + comparison
