@@ -109,7 +109,9 @@ invites/{email}_{jarId}       共用邀請
 
 ## 改版流程
 
-1. 每個版本開一個分支（例如 `v29`）。
+1. 每個版本開一個分支，命名格式為 `<類型>/<issue 編號>-<簡短描述>-v<版本號>`，
+   例如 `feature/4-carry-month-share-v30`、`fix/5-startup-error-v31`。
+   類型使用 `feature`（新功能）、`fix`（修正）、`refactor`（重構）、`docs`（文件）、`chore`（維護）。
 2. `js/config.js`：
    - `APP_VERSION` 加一（`sw.js` 會自動使用同一個版本號，不用改）。
    - `RELEASE` 換成這次的更新內容，用**給使用者看的口吻**撰寫；`t` 為 `new`（新功能）/ `imp`（改善）/ `fix`（修正）。
