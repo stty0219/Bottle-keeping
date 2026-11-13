@@ -8,7 +8,7 @@ const sjId=id=>id.slice(SJ.length);
 const jarActive=(jp,mk)=>!!jp&&(!jp.from||mk>=jp.from)&&(!jp.until||mk<jp.until);
 function targets(mk){return S.buckets.map(b=>({id:b.id,pct:+b.pct||0,amt:+b.amt||0}))}
 // my contribution plan for a shared jar: hist = [{m:'YYYY-MM', amt, src}] — each entry applies from its month on
-function defaultSrc(){const b=S.buckets.find(b=>/日常/.test(b.name))||S.buckets.find(b=>!isRemainder(b))||S.buckets[0];return b?b.id:null}
+function defaultSrc(){const b=S.buckets.find(b=>/日常/.test(b.name))||S.buckets.find(b=>!isPinned(b))||S.buckets[0];return b?b.id:null}
 function jarEff(jp,mk){if(!jp||!jp.hist)return null;let e=null;for(const x of jp.hist)if(x.m<=mk)e=x;return e}
 function jarContrib(jp,mk){ // {amt,src} moved in month mk (up to the furthest month in view)
   if(!jarActive(jp,mk)||mk>horizon())return null;
@@ -46,12 +46,31 @@ function planTotals(excludeId){ // month -> total of plan-following income
   return m;
 }
 const planSum=mk=>targets(mk).reduce((a,b)=>a+Math.max(0,b.amt),0);
-function remainderBucket(){return bucketById(S.remainderId)||S.buckets[S.buckets.length-1]}
+// where income above the plan goes (excessTo) and where reset jars settle at month end (sweepTo); both always carry
+function fallbackPin(){const c=S.buckets.filter(b=>b.carry!==false);return c[c.length-1]||S.buckets[S.buckets.length-1]}
+function excessBucket(){return bucketById(S.excessTo)||fallbackPin()}
+function sweepBucket(){return bucketById(S.sweepTo)||fallbackPin()}
+// the jar that covers b's overspending (never itself), or null
+function coverOf(b){return b&&b.coverBy&&b.coverBy!==b.id?bucketById(b.coverBy)||null:null}
+function migrateCover(){ // v32: the designated jar (remainderId) becomes excessTo + sweepTo + coverBy of every reset jar
+  if(!S.buckets||!S.buckets.length)return false;
+  let changed=false;
+  if(S.excessTo==null&&S.sweepTo==null){
+    const r=bucketById(S.remainderId)||S.buckets[S.buckets.length-1];
+    S.excessTo=S.sweepTo=r.id;
+    for(const b of S.buckets)b.coverBy=b.carry===false&&b.id!==r.id?r.id:null;
+    changed=true;
+  }
+  for(const b of S.buckets)if(b.coverBy&&!coverOf(b)){b.coverBy=null;changed=true}
+  if(!bucketById(S.excessTo)){S.excessTo=fallbackPin().id;changed=true}
+  if(!bucketById(S.sweepTo)){S.sweepTo=fallbackPin().id;changed=true}
+  return changed;
+}
 function planAlloc(T,mk){ // how one month's plan income is split
   const ts=targets(mk),res={};ts.forEach(b=>res[b.id]=0);
   if(T<=0||!S.buckets.length)return res;
   if(S.allocMode!=='amount')return Object.assign(res,allocate(T,'pct',null,mk));
-  const rid=remainderBucket().id,P=planSum(mk);
+  const rid=excessBucket().id,P=planSum(mk);
   if(P<=0){res[rid]=T;return res}
   if(T>=P){ts.forEach(b=>res[b.id]=Math.max(0,b.amt));res[rid]+=T-P;return res}
   const bs=ts.filter(b=>b.amt>0);let rem=T;
@@ -69,8 +88,8 @@ const curMonth=()=>today().slice(0,7);
 let horizonCache=null;
 function horizon(){if(horizonCache)return horizonCache;return horizonCache=S.txns.reduce((a,t)=>t.date.slice(0,7)>a?t.date.slice(0,7):a,curMonth())}
 function shiftMonth(mk,d){const [y,m]=mk.split('-').map(Number);const dt=new Date(y,m-1+d,1);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')}
-const isRemainder=b=>!!b&&remainderBucket()&&remainderBucket().id===b.id;
-const carries=b=>b.carry!==false||isRemainder(b); // the designated jar always carries
+const isPinned=b=>!!b&&S.buckets.length>0&&(excessBucket().id===b.id||sweepBucket().id===b.id);
+const carries=b=>b.carry!==false||isPinned(b); // excessTo / sweepTo always carry
 // balances for one month: open (carried in) + this month's in − out
 function stats(excludeId,month){
   month=month||curMonth();
@@ -87,30 +106,33 @@ function stats(excludeId,month){
   for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk],mk);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
   for(const jid in (S.jarPlan||{})){const jp=S.jarPlan[jid];
     for(let mk=jp.from||month;mk<=month;mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);if(c){add(c.src,mk,'o',c.amt);add(c.src,mk,'j',c.amt)}}}
-  // walk month by month: carrying jars keep their balance; a reset jar's overspending is covered right away by the
-  // designated jar (墊付), and whatever a reset jar has left is swept into the designated jar at month end
-  const rem=remainderBucket();
+  // walk month by month:
+  // 1. balance = carried in + this month's in − out
+  // 2. a jar with coverBy has its own shortfall (from step 1) covered right away (墊付); not chained — a coverer that
+  //    goes negative by covering others stays negative
+  // 3. at month end every reset jar settles what it has left (or lacks) into sweepTo
+  const sw=sweepBucket();
   const months=new Set([month]);for(const id in per)for(const mk in per[id])months.add(mk);
   const bal={},out={};S.buckets.forEach(b=>bal[b.id]=0);
   let lastSweep=0,lastParts=[],lastMk=null;
   for(const mk of [...months].sort()){
-    const isTarget=mk===month,open={};
+    const isTarget=mk===month,open={},short={},cov={},covBy={};
     for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0};open[b.id]=bal[b.id];bal[b.id]+=cur.i-cur.o}
-    let cov=0;const covParts=[];
-    if(rem)for(const b of S.buckets)if(!carries(b)&&b.id!==rem.id&&bal[b.id]<0){const c=-bal[b.id];bal[b.id]=0;cov+=c;covParts.push({id:b.id,amount:c})}
-    if(rem)bal[rem.id]-=cov;
+    for(const b of S.buckets)short[b.id]=bal[b.id]<0?-bal[b.id]:0;
+    for(const b of S.buckets){const c=coverOf(b);
+      if(c&&short[b.id]>0){bal[b.id]+=short[b.id];bal[c.id]-=short[b.id];covBy[b.id]=c.id;(cov[c.id]||(cov[c.id]=[])).push({id:b.id,amount:short[b.id]})}}
     if(isTarget){
-      for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0};
-        out[b.id]={open:open[b.id],monthIn:cur.i,monthOut:cur.o,monthJar:cur.j,bal:bal[b.id],sweep:0,over:(covParts.find(p=>p.id===b.id)||{}).amount||0}}
-      if(rem){out[rem.id].covered=cov;out[rem.id].coverParts=covParts}
+      for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0},parts=cov[b.id]||[];
+        out[b.id]={open:open[b.id],monthIn:cur.i,monthOut:cur.o,monthJar:cur.j,bal:bal[b.id],sweep:0,short:short[b.id],
+          over:covBy[b.id]?short[b.id]:0,coveredBy:covBy[b.id]||null,covered:parts.reduce((a,p)=>a+p.amount,0),coverParts:parts}}
       break;
     }
     let sweep=0;const parts=[];
     for(const b of S.buckets){if(!carries(b)){if(bal[b.id])parts.push({id:b.id,amount:bal[b.id]});sweep+=bal[b.id];bal[b.id]=0}}
-    if(rem)bal[rem.id]+=sweep;
+    if(sw)bal[sw.id]+=sweep;
     lastSweep=sweep;lastParts=parts;lastMk=mk;
   }
-  if(rem&&out[rem.id]){out[rem.id].sweep=lastSweep;out[rem.id].sweepParts=lastParts;out[rem.id].sweepMonth=lastMk}
+  if(sw&&out[sw.id]){out[sw.id].sweep=lastSweep;out[sw.id].sweepParts=lastParts;out[sw.id].sweepMonth=lastMk}
   return out;
 }
 

@@ -9,7 +9,10 @@ function shelfIds(){ // full overview order: personal jar ids and 'sj:<jarId>'
 }
 function shelfPos(){const p={};shelfIds().forEach((id,i)=>p[id]=i);return p}
 function applyShelf(ids){
-  if(!bucketById(S.remainderId)&&remainderBucket())S.remainderId=remainderBucket().id; // pin the designated jar before reordering
+  if(S.buckets.length){ // pin excessTo / sweepTo before reordering (their fallback depends on the order)
+    if(!bucketById(S.excessTo))S.excessTo=excessBucket().id;
+    if(!bucketById(S.sweepTo))S.sweepTo=sweepBucket().id;
+  }
   S.shelfOrder=ids.slice();
   const pos={};ids.forEach((id,i)=>pos[id]=i);
   S.buckets.sort((a,b)=>(pos[a.id]??1e9)-(pos[b.id]??1e9));
