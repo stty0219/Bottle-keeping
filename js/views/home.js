@@ -29,7 +29,14 @@ function jarCol(id,name,color,s,sub,shared,bad,carry){
     <div class="jarsub ${bad?'bad':''}">${sub}</div></div>`;
 }
 // cover relations: names of the jars this jar covered, and the jar that covered it
-function coverNames(s){return [...new Set((s.coverParts||[]).map(p=>(bucketById(p.id)||{}).name||''))].map(esc).join('、')}
+function coverNames(s){return [...new Set((s.coverParts||[]).map(p=>isSJ(p.id)?nameOf(p.id):(bucketById(p.id)||{}).name||''))].map(esc).join('、')}
+// shared jar: this month's new overspending, and who hasn't covered their share yet
+function jarOverLine(jid,month){
+  const j=Cloud.jars[jid],o=j&&jarOver(jid,month);if(!o||!o.over)return '';
+  if(!o.unpaid.length)return `<br><span class="note">超支 ${money(o.over)}・已墊付</span>`;
+  const me=myUid();
+  return `<br><span class="neg">超支 ${money(o.over)}・${o.unpaid.map(x=>`${esc(x.uid===me?'你':memberName(j,x.uid))}尚未墊付 ${money(x.amount)}`).join('、')}</span>`;
+}
 function coveredByName(s){return esc((bucketById(s.coveredBy)||{}).name||'')}
 const overLine=s=>s.over?`<br><span class="neg">超支 ${money(s.over)} 由${coveredByName(s)}墊付</span>`:'';
 function leftSub(left){return left<0?`本月超用 ${money(-left)}`:`本月剩 ${money(left)}`}
@@ -44,7 +51,8 @@ function monthRow(name,color,s,shared,jid,carry){
   if(shared||carry){ // this month's share: got / used / left, then the running total
     const m=monthShare(s);
     let first;
-    if(shared)first=`本月撥入 ${money(m.in)}・共用支出 ${money(s.monthOut)}（你的份額 ${money(jarShare(jid,listMonth))}）`;
+    if(shared){const mc=s.monthCover||0;
+      first=`本月撥入 ${money(m.in-mc)}${mc?`・超支墊付 ${money(mc)}`:''}・共用支出 ${money(s.monthOut)}（你的份額 ${money(jarShare(jid,listMonth))}）${jarOverLine(jid,listMonth)}`}
     else{const parts=[];if(s.covered)parts.push(`替${coverNames(s)}墊付 ${money(s.covered)}`);if(s.monthJar)parts.push(`撥共用 ${money(s.monthJar)}`);
       first=`本月分到 ${money(m.in)}・用掉 ${money(m.used)}${parts.length?`（含${parts.join('・')}）`:''}${overLine(s)}`}
     const left=m.left<0?`<span class="neg">${leftSub(m.left)}</span>`:leftSub(m.left);
@@ -61,7 +69,7 @@ function monthRow(name,color,s,shared,jid,carry){
 }
 function jarShare(jid,month){let s=0;for(const t of (Cloud.jarTxns[jid]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===month)s+=myShare(t);return s}
 // records for a month: my own records + shared-jar records.
-// My mirrored transfers already appear as my own transfers; my monthly contribution shows under its source jar.
+// My mirrored transfers already appear as my own transfers; my monthly contribution and overspending cover show under their source jar.
 function monthItems(month,filter){
   const me=myUid();filter=filter||'all';
   let own=[],sh=[];
@@ -74,7 +82,7 @@ function monthItems(month,filter){
     for(const t of (Cloud.jarTxns[j.id]||[])){
       if(month!==null&&t.date.slice(0,7)!==month)continue;
       if(!isSJ(filter)){
-        const mineContrib=t.by===me&&t.kind==='contrib';
+        const mineContrib=t.by===me&&(t.kind==='contrib'||t.kind==='cover');
         if(filter!=='all'){if(!(mineContrib&&t.srcId===filter))continue}
         else if(t.by===me&&isMirror(t)&&!mineContrib)continue;
       }

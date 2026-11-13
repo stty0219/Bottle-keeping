@@ -5,7 +5,7 @@ const myUid=()=>Cloud.user&&Cloud.user.uid;
 const myEmail=()=>((Cloud.user&&Cloud.user.email)||'').toLowerCase();
 const myName=()=>(Cloud.user&&(Cloud.user.displayName||(Cloud.user.email||'').split('@')[0]))||'我';
 const jarsList=()=>{const pos=shelfPos();return Object.keys(Cloud.jars).map(id=>Object.assign({id},Cloud.jars[id])).sort((a,b)=>(pos[SJ+a.id]??1e9)-(pos[SJ+b.id]??1e9))}; // overview order
-const isMirror=t=>t.kind==='contrib'||(t.id||'').startsWith('m_');
+const isMirror=t=>t.kind==='contrib'||t.kind==='cover'||(t.id||'').startsWith('m_');
 function nameOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return (j?j.name:((S.jarPlan||{})[sjId(id)]||{}).name||'共用罐')+'（共用）'}const b=bucketById(id);return b?b.name:'—'}
 function colorOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return j?j.color:'#999'}const b=bucketById(id);return b?b.color:'#999'}
 function memberName(j,uid){const m=(j.memberInfo||{})[uid];return m?(m.name||m.email):'成員'}
@@ -60,7 +60,10 @@ function watchInvites(){
 function desiredMirrors(jid){
   const me=myUid(),nm=myName(),key=SJ+jid,jp=(S.jarPlan||{})[jid],res={};
   if(jp&&jp.from)for(let mk=jp.from,hz=horizon();mk<=hz;mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);
-    if(c)res['contrib_'+me+'_'+mk]={kind:'contrib',amount:c.amt,date:mk+'-01',note:'',by:me,byName:nm,src:nameOf(c.src),srcId:c.src}}
+    if(c)res['contrib_'+me+'_'+mk]={kind:'contrib',amount:c.amt,date:mk+'-01',note:'',by:me,byName:nm,src:nameOf(c.src),srcId:c.src};
+    // my share of this month's new overspending, covered from the jar I chose
+    const cv=jarCoverSrc(jp,mk),o=cv&&Cloud.jars[jid]?jarOver(jid,mk):null;
+    if(o&&o.share>0)res['cover_'+me+'_'+mk]={kind:'cover',amount:o.share,date:mk+'-01',note:'',by:me,byName:nm,src:nameOf(cv),srcId:cv}}
   for(const t of S.txns){
     if(t.type==='transfer'&&t.to===key)res['m_'+t.id]={kind:'in',amount:t.amount,date:t.date,note:t.note||'',by:me,byName:nm,src:nameOf(t.from)};
     else if(t.type==='transfer'&&t.from===key)res['m_'+t.id]={kind:'withdraw',amount:t.amount,date:t.date,note:t.note||'',by:me,byName:nm,src:nameOf(t.to)};
@@ -188,7 +191,9 @@ function sharedHtml(){
       ${(()=>{const e=jarEff(jp,curMonth())||{amt:0,src:defaultSrc()};
         return `<div class="row2" style="margin-top:0"><label class="f">資金來源<select data-edit="jsrc" data-jid="${j.id}">${S.buckets.map(b=>`<option value="${b.id}" ${b.id===e.src?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
         <label class="f">每月撥款<input type="number" inputmode="numeric" min="0" step="100" value="${+e.amt||0}" data-edit="jamt" data-jid="${j.id}"></label></div>
-        <div class="note" style="margin-top:-4px">每月從「${esc(nameOf(e.src))}」撥進共用罐，單向不退回。修改從這個月開始生效，過去的月份維持原本的金額。只有你看得到自己的設定。</div>`})()}
+        <div class="note" style="margin-top:-4px">每月從「${esc(nameOf(e.src))}」撥進共用罐，單向不退回。修改從這個月開始生效，過去的月份維持原本的金額。只有你看得到自己的設定。</div>
+        <label class="carry cover jcover">共用罐超支時，我的份額從<select data-edit="jcover" data-jid="${j.id}" aria-label="共用罐超支時，我的份額由哪個罐子墊付"><option value="">不墊付</option>${S.buckets.map(b=>`<option value="${b.id}" ${b.id===e.coverBy?'selected':''}>${esc(b.name)}</option>`).join('')}</select>扣</label>
+        <div class="note" style="margin-top:-4px">共用罐這個月新產生的超支，依目前人數平分。不墊付的話，你的份額會讓共用罐維持負數，並標示你尚未墊付。修改從這個月開始生效。</div>`})()}
       <div class="sub">成員</div>${members}${pend}
       ${owner?`<div class="invrow"><input type="email" id="inv-${j.id}" placeholder="對方登入用的 Email" inputmode="email"><button class="gbtn" data-action="invite" data-jid="${j.id}">邀請</button></div>`:''}
       <div class="sub">共用分類</div>${cats}

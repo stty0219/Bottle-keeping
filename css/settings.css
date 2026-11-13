@@ -7,6 +7,7 @@
 .carry.cover{margin-top:0}
 .carry.cover select{width:auto;flex:0 1 auto;padding:5px 10px}
 .jhead{display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center}
+.jarcard .carry{grid-column:auto;margin:0;flex-wrap:wrap}
 .jarcard .sub{font-size:13px;font-weight:700;margin-top:4px}
 .mem{display:flex;justify-content:space-between;align-items:center;font-size:14px;min-height:32px}
 .invrow{display:grid;grid-template-columns:1fr auto;gap:8px}
