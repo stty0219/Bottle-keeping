@@ -20,3 +20,17 @@
 .set-item.brow .carry{grid-column:3/-1}
 .dh{display:grid;place-items:center;width:24px;height:36px;color:var(--muted);font-size:20px;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none}
 .set-item.lifted{background:var(--surface);border-radius:12px;box-shadow:0 10px 24px rgba(10,20,30,.22)}
+
+/* 可展開、收合的分區 */
+.sec{border-bottom:1px solid var(--line)}
+.sec-h{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;background:none;border:0;padding:16px 2px;color:var(--ink);text-align:left;min-height:52px}
+.sec-t{font-size:15px;font-weight:700;flex:none}
+.sec-r{display:flex;align-items:center;gap:8px;min-width:0}
+.sec-sum{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sec-badge{flex:none;font-size:12px;font-weight:700;color:var(--bg);background:var(--neg);border-radius:999px;padding:2px 9px;white-space:nowrap}
+.sec-h .chev{flex:none;display:inline-block;width:14px;text-align:center;color:var(--muted);font-size:18px;line-height:1;transition:transform .2s}
+.sec-h[aria-expanded="true"] .chev{transform:rotate(90deg)}
+:root[data-motion="reduce"] .sec-h .chev{transition:none}
+.sec-b{padding:0 0 18px}
+.sec-sub{font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 6px}
+.sec-b>.sec-sub:first-child{margin-top:0}
