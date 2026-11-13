@@ -7,7 +7,8 @@ const isSJ=id=>typeof id==='string'&&id.startsWith(SJ);
 const sjId=id=>id.slice(SJ.length);
 const jarActive=(jp,mk)=>!!jp&&(!jp.from||mk>=jp.from)&&(!jp.until||mk<jp.until);
 function targets(mk){return S.buckets.map(b=>({id:b.id,pct:+b.pct||0,amt:+b.amt||0}))}
-// my contribution plan for a shared jar: hist = [{m:'YYYY-MM', amt, src}] — each entry applies from its month on
+// my contribution plan for a shared jar: hist = [{m:'YYYY-MM', amt, src, coverBy}] — each entry applies from its month on
+// coverBy: my personal jar that covers my share when the shared jar overspends (null = don't cover)
 function defaultSrc(){const b=S.buckets.find(b=>/日常/.test(b.name))||S.buckets.find(b=>!isPinned(b))||S.buckets[0];return b?b.id:null}
 function jarEff(jp,mk){if(!jp||!jp.hist)return null;let e=null;for(const x of jp.hist)if(x.m<=mk)e=x;return e}
 function jarContrib(jp,mk){ // {amt,src} moved in month mk (up to the furthest month in view)
@@ -15,12 +16,16 @@ function jarContrib(jp,mk){ // {amt,src} moved in month mk (up to the furthest m
   const e=jarEff(jp,mk);if(!e||!(+e.amt>0)||!bucketById(e.src))return null;
   return {amt:+e.amt,src:e.src};
 }
+function jarCoverSrc(jp,mk){ // my jar that covers my share of month mk's overspending, or null
+  if(!jarActive(jp,mk)||mk>horizon())return null;
+  const e=jarEff(jp,mk);return e&&e.coverBy&&bucketById(e.coverBy)?e.coverBy:null;
+}
 function setJarPlan(jid,field,val){ // changes take effect from the current month; past months keep their amount
   const jp=(S.jarPlan||{})[jid];if(!jp)return;
   jp.hist=jp.hist||[];const m=curMonth(),last=jp.hist[jp.hist.length-1];
-  const base=jarEff(jp,m)||{amt:0,src:defaultSrc()};
+  const base=jarEff(jp,m)||{amt:0,src:defaultSrc(),coverBy:null};
   if(last&&last.m===m)last[field]=val;
-  else jp.hist.push(Object.assign({m:(jp.from&&jp.from>m)?jp.from:m,amt:base.amt,src:base.src},{[field]:val}));
+  else jp.hist.push(Object.assign({m:(jp.from&&jp.from>m)?jp.from:m,amt:base.amt,src:base.src,coverBy:base.coverBy||null},{[field]:val}));
 }
 function migrateJarPlan(){
   let changed=false;
@@ -106,13 +111,21 @@ function stats(excludeId,month){
   for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk],mk);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
   for(const jid in (S.jarPlan||{})){const jp=S.jarPlan[jid];
     for(let mk=jp.from||month;mk<=month;mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);if(c){add(c.src,mk,'o',c.amt);add(c.src,mk,'j',c.amt)}}}
+  // my share of shared-jar overspending: read from the cover records I wrote into the shared jars
+  const me=myUid(),jc={};
+  if(me)for(const jid in Cloud.jarTxns)for(const t of Cloud.jarTxns[jid]){
+    if(t.kind!=='cover'||t.by!==me||t.id===excludeId||!per[t.srcId])continue;
+    const mk=t.date.slice(0,7);if(mk>month)continue;
+    (jc[mk]||(jc[mk]=[])).push({src:t.srcId,id:SJ+jid,amount:t.amount});
+  }
   // walk month by month:
   // 1. balance = carried in + this month's in − out
   // 2. a jar with coverBy has its own shortfall (from step 1) covered right away (墊付); not chained — a coverer that
-  //    goes negative by covering others stays negative
+  //    goes negative by covering others stays negative. My share of a shared jar's overspending is taken from its
+  //    source jar the same way (after short is known, so it never triggers the source jar's own coverBy)
   // 3. at month end every reset jar settles what it has left (or lacks) into sweepTo
   const sw=sweepBucket();
-  const months=new Set([month]);for(const id in per)for(const mk in per[id])months.add(mk);
+  const months=new Set([month,...Object.keys(jc)]);for(const id in per)for(const mk in per[id])months.add(mk);
   const bal={},out={};S.buckets.forEach(b=>bal[b.id]=0);
   let lastSweep=0,lastParts=[],lastMk=null;
   for(const mk of [...months].sort()){
@@ -121,6 +134,7 @@ function stats(excludeId,month){
     for(const b of S.buckets)short[b.id]=bal[b.id]<0?-bal[b.id]:0;
     for(const b of S.buckets){const c=coverOf(b);
       if(c&&short[b.id]>0){bal[b.id]+=short[b.id];bal[c.id]-=short[b.id];covBy[b.id]=c.id;(cov[c.id]||(cov[c.id]=[])).push({id:b.id,amount:short[b.id]})}}
+    for(const x of (jc[mk]||[])){bal[x.src]-=x.amount;(cov[x.src]||(cov[x.src]=[])).push({id:x.id,amount:x.amount})}
     if(isTarget){
       for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0},parts=cov[b.id]||[];
         out[b.id]={open:open[b.id],monthIn:cur.i,monthOut:cur.o,monthJar:cur.j,bal:bal[b.id],sweep:0,short:short[b.id],
@@ -136,15 +150,25 @@ function stats(excludeId,month){
   return out;
 }
 
-const jarIn=t=>t.kind==='contrib'||t.kind==='in';
-function jarStats(jid,month,excludeId){ // shared jars always carry over
-  month=month||curMonth();let open=0,mi=0,mo=0;
+const jarIn=t=>t.kind==='contrib'||t.kind==='in'||t.kind==='cover';
+function jarStats(jid,month,excludeId){ // shared jars always carry over; monthCover = this month's cover records (part of monthIn)
+  month=month||curMonth();let open=0,mi=0,mo=0,mc=0;
   for(const t of (Cloud.jarTxns[jid]||[])){
     if(t.id===excludeId)continue;
     const mk=t.date.slice(0,7);if(mk>month)continue;
     const v=jarIn(t)?t.amount:-t.amount;
-    if(mk<month)open+=v;else if(jarIn(t))mi+=t.amount;else mo+=t.amount;
+    if(mk<month)open+=v;else if(jarIn(t)){mi+=t.amount;if(t.kind==='cover')mc+=t.amount}else mo+=t.amount;
   }
-  return {open,monthIn:mi,monthOut:mo,bal:open+mi-mo};
+  return {open,monthIn:mi,monthOut:mo,monthCover:mc,bal:open+mi-mo};
+}
+// overspending that is new in month mk, split evenly by the current member count (every member's device gets the same result)
+// B = open (incl. earlier months' covers) + this month's in (excl. covers) − out; new = max(0,−B) − max(0,−open), at least 0
+function jarOver(jid,mk){
+  const s=jarStats(jid,mk),B=s.bal-s.monthCover;
+  const over=Math.max(0,Math.max(0,-B)-Math.max(0,-s.open));
+  const mem=(Cloud.jars[jid]||{}).members||[],n=mem.length||1,share=Math.round(over/n),paid={};
+  for(const t of (Cloud.jarTxns[jid]||[]))if(t.kind==='cover'&&t.date.slice(0,7)===mk)paid[t.by]=(paid[t.by]||0)+t.amount;
+  const unpaid=over?mem.map(u=>({uid:u,amount:Math.max(0,share-(paid[u]||0))})).filter(x=>x.amount>0):[];
+  return {over,n,share,paid,unpaid,covered:s.monthCover};
 }
 function balanceOf(id,month,excludeId){return isSJ(id)?jarStats(sjId(id),month,excludeId).bal:(stats(excludeId,month)[id]||{bal:0}).bal}

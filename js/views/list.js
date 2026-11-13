@@ -27,19 +27,31 @@ function sysItems(month,filter){
 // 月初結算: collapsed to one net line, expand for the individual carry-overs and settlements
 let coverOpen=false;
 function coverItems(month,filter){ // this month's overspending: which jar covered which, and how much
-  const st=stats(null,month),rows=[];
+  const rows=[],date=month+'-01';
+  if(isSJ(filter)){ // a shared jar: what each member covered, and who still owes their share
+    const jid=sjId(filter),j=Cloud.jars[jid];if(!j)return rows;
+    const o=jarOver(jid,month),me=myUid(),nm=u=>u===me?'你':memberName(j,u);
+    for(const t of (Cloud.jarTxns[jid]||[]))if(t.kind==='cover'&&t.date.slice(0,7)===month)
+      rows.push({sys:true,id:'cov_'+t.id,ic:'🩹',date,amount:-t.amount,color:j.color,jar:t.src?`從${t.src}`:'',label:`${nm(t.by)}已墊付`});
+    for(const x of o.unpaid)
+      rows.push({sys:true,id:'cov_u_'+x.uid,date,amount:-x.amount,neg:true,color:j.color,jar:`每人份額 ${money(o.share)}`,label:`${nm(x.uid)}尚未墊付`});
+    rows.total=o.over;
+    return rows;
+  }
+  const st=stats(null,month);
   for(const cb of S.buckets){
     for(const p of ((st[cb.id]||{}).coverParts||[])){
       if(filter!=='all'&&filter!==cb.id&&filter!==p.id)continue;
+      if(isSJ(p.id)){rows.push({sys:true,id:'cov_'+p.id,ic:'🩹',date,amount:-p.amount,color:cb.color,jar:`從${cb.name}`,label:`替${nameOf(p.id)}墊付`});continue}
       const b=bucketById(p.id);if(!b)continue;
-      rows.push({sys:true,id:'cov_'+p.id,date:month+'-01',amount:-p.amount,color:b.color,jar:`由${cb.name}墊付`,label:`${b.name}超支`});
+      rows.push({sys:true,id:'cov_'+p.id,date,amount:-p.amount,color:b.color,jar:`由${cb.name}墊付`,label:`${b.name}超支`});
     }
   }
   return rows;
 }
 function coverHtml(rows){
   if(!rows.length)return '';
-  const total=rows.reduce((a,r)=>a-r.amount,0);
+  const total=rows.total!=null?rows.total:rows.reduce((a,r)=>a-r.amount,0);
   return `<div class="settle ${coverOpen?'open':''}"><button class="settle-h" data-action="cover" aria-expanded="${coverOpen}">
       <span class="lbl">本月超支墊付</span><span class="net num">共 <b class="neg">${money(total)}</b><span class="chev">›</span></span></button>
     <ul class="txs settle-list">${rows.map(sysRow).join('')}</ul></div>`;
@@ -55,8 +67,8 @@ function settleHtml(rows){
 }
 function sysRow(t){
   const pos=t.amount>0;
-  return `<li><div class="tx sys" aria-label="${esc(t.label)} ${money(t.amount)}"><span class="ic">${t.id.startsWith('sys_s_')?(pos?'🪙':'⚠️'):(pos?'↩️':'⚠️')}</span><span class="mid"><div class="t1">${esc(t.label)}</div>
-    <div class="t2"><span class="dot" style="background:${t.color}"></span>${esc(t.jar)}</div></span><span class="amt num ${pos?'in':''}">${pos?'+':'−'}${money(Math.abs(t.amount))}</span></div></li>`;
+  return `<li><div class="tx sys" aria-label="${esc(t.label)} ${money(t.amount)}"><span class="ic">${t.ic||(t.id.startsWith('sys_s_')?(pos?'🪙':'⚠️'):(pos?'↩️':'⚠️'))}</span><span class="mid"><div class="t1${t.neg?' neg':''}">${esc(t.label)}</div>
+    <div class="t2"><span class="dot" style="background:${t.color}"></span>${esc(t.jar)}</div></span><span class="amt num ${pos?'in':''}${t.neg?' neg':''}">${pos?'+':'−'}${money(Math.abs(t.amount))}</span></div></li>`;
 }
 const delAct=ref=>`<div class="del-act"><button data-action="swdel" data-ref="${esc(ref)}" tabindex="-1">刪除</button></div>`;
 function sharedRow(t,noSwipe){
@@ -64,10 +76,11 @@ function sharedRow(t,noSwipe){
   let ic='🧾',t1='',sign='−',cls='';
   if(t.kind==='expense'){ic=t.emoji||'🧾';t1=t.catName||'支出'}
   else if(t.kind==='contrib'){ic='🫙';t1='每月撥款';sign='+';cls='in'}
+  else if(t.kind==='cover'){ic='🩹';t1='超支墊付';sign='+';cls='in'}
   else if(t.kind==='in'){ic='💵';t1=t.note||'投入';sign='+';cls='in'}
   else{ic='🔁';t1='從共用罐轉出'}
   const who=t.by===me?'你':(t.byName||'成員');
-  const extra=((t.kind==='in'||t.kind==='contrib')&&t.src?'從'+esc(t.src)+'・':'')+(t.kind==='withdraw'&&t.src?'到'+esc(t.src)+'・':'')+(t.note&&t.kind!=='in'?esc(t.note)+'・':'');
+  const extra=((t.kind==='in'||t.kind==='contrib'||t.kind==='cover')&&t.src?'從'+esc(t.src)+'・':'')+(t.kind==='withdraw'&&t.src?'到'+esc(t.src)+'・':'')+(t.note&&t.kind!=='in'?esc(t.note)+'・':'');
   const canDel=!noSwipe&&t.by===me&&(t.kind==='expense'||((t.id||'').startsWith('m_')&&S.txns.some(x=>x.id===t.id.slice(2))));
   const ref=t.kind==='expense'?'s:'+t.jid+':'+t.id:'p:'+(t.id||'').slice(2);
   return `<li${canDel?` class="swipe"`:''}>${canDel?delAct(ref):''}<button class="tx" data-action="stx" data-jid="${t.jid}" data-id="${esc(t.id)}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div>
@@ -191,13 +204,14 @@ function listResultsHtml(){
   let shown=listCat?items.filter(t=>catOf(t)===listCat):items;
   if(q)shown=shown.filter(t=>noteMatch(t,terms));
   const sys=(!q&&!listCat)?sysItems(listMonth,listBucket):[];
-  const covs=(!q&&!listCat&&!isSJ(listBucket))?coverItems(listMonth,listBucket):[];
-  let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,toJar=0;
+  const covs=(!q&&!listCat)?coverItems(listMonth,listBucket):[];
+  let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,toJar=0,sumCov=0;
   for(const t of items){
     if(t.jid){
       if(t.kind==='expense'){shOut+=t.amount;shMine+=myShare(t)}
-      else if(isSJ(listBucket)){if(jarIn(t))sumIn+=t.amount}
+      else if(isSJ(listBucket)){if(t.kind==='cover')sumCov+=t.amount;else if(jarIn(t))sumIn+=t.amount}
       else if(t.kind==='contrib'&&t.by===myUid())toJar+=t.amount;
+      else if(t.kind==='cover'&&t.by===myUid())sumCov+=t.amount;
     }
     else{
       if(t.type==='expense')sumOut+=t.amount;
@@ -220,8 +234,8 @@ function listResultsHtml(){
   const totalLine=q
     ?`<div class="total"><span>${all?'所有月份':'這個月'}</span><span class="num" style="text-align:right">找到 <b>${shown.length}</b> 筆　支出 <b>${money(found)}</b></span></div>`
     :`<div class="total"><span>這個月</span><span class="num" style="text-align:right">${isSJ(listBucket)
-      ?`共用支出 <b>${money(shOut)}</b>（你的份額 ${money(shMine)}）<br>撥入 <b>${money(sumIn)}</b>`
-      :`個人支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${toJar?`<br>撥到共用罐 ${money(toJar)}`:''}${shOut?`<br>共用支出 ${money(shOut)}（你的份額 <b>${money(shMine)}</b>）`:''}`}</span></div>`;
+      ?`共用支出 <b>${money(shOut)}</b>（你的份額 ${money(shMine)}）<br>撥入 <b>${money(sumIn)}</b>${sumCov?`・超支墊付 <b>${money(sumCov)}</b>`:''}`
+      :`個人支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${toJar?`<br>撥到共用罐 ${money(toJar)}`:''}${sumCov?`<br>替共用罐墊付 ${money(sumCov)}`:''}${shOut?`<br>共用支出 ${money(shOut)}（你的份額 <b>${money(shMine)}</b>）`:''}`}</span></div>`;
   const empty=q?`<div class="empty">${all?'所有月份':'這個月'}沒有符合「${esc(listQuery.trim())}」的紀錄。${all?'':'<br>可以切換到「所有月份」試試看。'}</div>`:'<div class="empty">這個月還沒有紀錄。</div>';
   return `${settleHtml(sys)}${coverHtml(covs)}${totalLine}
     ${q?'':pieHtml()}

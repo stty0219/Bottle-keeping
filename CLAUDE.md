@@ -55,7 +55,7 @@ js/
   config.js            APP_VERSION 與 RELEASE（改版只改這裡）
   state.js             共用工具、預設資料、全域狀態 S、本機儲存
   cloud.js             Firebase 同步：帳本、紀錄、寫入流程
-  shared-jars.js       共用罐：成員、邀請、撥款紀錄（mirror）同步
+  shared-jars.js       共用罐：成員、邀請、撥款與超支墊付紀錄（mirror）同步
   account.js           登入／登出
   setup.js             舊資料轉換、防縮放、動態效果設定
   notify.js            通知鈴鐺、新版本偵測（讀取線上的 js/config.js）
@@ -83,7 +83,7 @@ js/
 - `allocMode`：固定為 `'amount'`（比例模式已移除，舊資料由 `migrateAlloc()` 轉換）
 - `excessTo`：收入超過計畫的錢放入的罐子；`sweepTo`：歸零罐子月底的剩餘或不足放入的罐子（兩者都一定結轉，找不到時退回最後一個會結轉的罐子）
 - `remainderId`：v31 以前的指定罐子。v32 起只由 `migrateCover()` 讀取一次（帳本沒有 excessTo、sweepTo 時轉換），persist 時寫入 `sweepTo` 給舊版裝置用
-- `jarPlan{}`：自己對各共用罐的撥款設定（`hist[]`，每筆從某月起生效）
+- `jarPlan{}`：自己對各共用罐的撥款設定（`hist[]`：每筆 `{m, amt, src, coverBy}`，從某月起生效，用 `setJarPlan()` 修改）；`coverBy` 是共用罐超支時自己的份額由哪個個人罐子墊付（`null` 不墊付）
 - `shelfOrder[]`：總覽罐子順序（含 `sj:<jarId>`）
 - `gradeRules`、`sumTheme`、`themeText`：月結算的評等條件、風格、各風格的稱號與評語
 
@@ -92,7 +92,7 @@ Firestore：
 ledgers/{ledgerId}            個人帳本（只有本人能讀寫），欄位同上
 ledgers/{ledgerId}/txns/{id}  個人紀錄
 jars/{jarId}                  共用罐：owner, members[], memberInfo{}, name, color, categories[]
-jars/{jarId}/txns/{id}        共用罐紀錄：kind = expense | contrib | in | withdraw；by = 記錄者；split = 記錄當下人數
+jars/{jarId}/txns/{id}        共用罐紀錄：kind = expense | contrib | in | withdraw | cover；by = 記錄者；split = 記錄當下人數；src/srcId = 撥款、墊付的來源罐子
 invites/{email}_{jarId}       共用邀請
 ```
 
@@ -103,16 +103,22 @@ invites/{email}_{jarId}       共用邀請
 1. **計畫分配即時重算**：修改每月金額會重新計算所有月份。同月收入加總後分配；超過計畫的部分放入 `excessTo`；不足時依計畫金額等比例分配。「全部放入一罐」的收入不參與計畫。
 2. **逐月推進**（`stats()`），每個月依序：
    1. 餘額 = 上月結轉 + 本月進 − 本月出。
-   2. **超支墊付，不連鎖**：依步驟 1 的餘額算出每個罐子自己的不足額（`short`）；有 `coverBy` 的罐子補到 $0（顯示 $0 並標示超支），墊付罐子扣同樣金額。墊付罐子因此變負數時維持負數，不再觸發它自己的 `coverBy`。沒有 `coverBy` 的罐子維持負數，結轉罐子帶到下個月。
+   2. **超支墊付，不連鎖**：依步驟 1 的餘額算出每個罐子自己的不足額（`short`）；有 `coverBy` 的罐子補到 $0（顯示 $0 並標示超支），墊付罐子扣同樣金額。墊付罐子因此變負數時維持負數，不再觸發它自己的 `coverBy`。沒有 `coverBy` 的罐子維持負數，結轉罐子帶到下個月。接著扣掉自己寫入共用罐的 `cover` 紀錄（見第 9 條），同樣不連鎖。
    3. 月底：每月歸零的罐子把剩餘或不足結算進 `sweepTo`，自己歸零。
    4. 收入超過計畫的部分在 `planAlloc` 放入 `excessTo`。
-   - 輸出：被墊付者 `over`、`coveredBy`；墊付者 `covered`（總額）、`coverParts`；每個罐子 `short`；`sweepTo` 另有 `sweep`、`sweepParts`、`sweepMonth`。
+   - 輸出：被墊付者 `over`、`coveredBy`；墊付者 `covered`（總額）、`coverParts`（替共用罐墊付時 `id` 為 `sj:<jarId>`）；每個罐子 `short`；`sweepTo` 另有 `sweep`、`sweepParts`、`sweepMonth`。
 3. **`excessTo`、`sweepTo` 一定結轉**（`carries()`），選單只列出會結轉的罐子。
 4. **共用罐撥款**：從設定的來源罐子單向撥出；修改只從當月起生效，過去月份維持原金額；撥款計算到「可切換的最遠月份」（`horizon()`：當月或已提前記帳的最遠月份）。
 5. **撥款紀錄由每位成員自己的裝置寫入共用罐**（`contrib_{uid}_{月份}`）。不同版本的裝置同時在線，可能互相覆蓋（尚未加版本保護）。
 6. **共用支出的個人份額** = 金額 ÷ 記錄當下人數（`split`）。總覽與明細的「支出」用份額；撥到共用罐的錢不算支出。
 7. **月初結算、本月超支墊付等系統紀錄只供顯示**，不計入收支合計、每日支出與圓餅圖。
-8. **評等**：結餘率 =（收入 − 支出）÷ 收入；自己超支的罐子（`short > 0`）都算超支，不論有沒有被墊付；只因替別人墊付而變負數的罐子不算。門檻在開發者選項調整，所有風格共用。
+8. **評等**：結餘率 =（收入 − 支出）÷ 收入；自己超支的罐子（`short > 0`）都算超支，不論有沒有被墊付；只因替別人（含共用罐）墊付而變負數的罐子不算。門檻在開發者選項調整，所有風格共用。
+9. **共用罐超支依人數平分**（`jarOver()`，每位成員的裝置算出的結果必須一致）：
+   - B(m) = open(m)（上月底餘額，含之前月份的墊付）+ 本月進（不含本月 `cover`）− 本月出；本月新超支 = max(0, −B) − max(0, −open)，小於 0 視為 0。之前沒人墊付的缺口不會再平分。
+   - 每人份額 = `Math.round(新超支 ÷ 目前成員人數)`；人數變動時過去月份會重算。
+   - 有設定 `coverBy`（`jarCoverSrc()`，從當月起生效）時，自己的裝置寫入 `cover_{uid}_{月份}`（`desiredMirrors()`）；份額為 0 或未設定時刪除。共用罐把 `cover` 算進帳（`jarIn()`）。
+   - 個人帳本從共用罐讀「自己寫的 `cover` 紀錄」，從 `srcId` 扣款：不算支出（不計入支出合計、圓餅圖、評等），計入 `covered`／`coverParts` 與「本月用掉」。退出或刪除共用罐後讀不到這些紀錄，扣款會消失。
+   - 尚未墊付 = 份額 − 該成員本月的 `cover` 紀錄；讓共用罐維持負數，並標示成員名稱。
 
 ## 改版流程
 

@@ -22,6 +22,7 @@
 .tx .t2{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx .amt{font-weight:600}
 .amt.in{color:#2F7D4F}
+.tx .amt.neg,.tx.sys .t1.neg{color:var(--neg)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .amt.in{color:#6FCB93}}
 .pie svg{touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
 .pie{display:grid;grid-template-columns:136px 1fr;gap:16px;align-items:center;margin:18px 0 6px}

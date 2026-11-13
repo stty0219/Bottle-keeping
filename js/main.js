@@ -78,6 +78,7 @@ document.addEventListener('click',e=>{
       if(used){toast('這個罐子有紀錄或分類在用，先把分類改到別的罐子');break}
       S.buckets=S.buckets.filter(b=>b.id!==id);
       for(const b of S.buckets)if(b.coverBy===id)b.coverBy=null;
+      for(const jp of Object.values(S.jarPlan||{}))for(const x of (jp.hist||[]))if(x.coverBy===id)x.coverBy=null;
       if(S.excessTo===id)S.excessTo=fallbackPin().id;
       if(S.sweepTo===id)S.sweepTo=fallbackPin().id;
       persist();render();break}
@@ -145,6 +146,7 @@ document.addEventListener('change',e=>{
     if(b.carry===false)b.carry=true; // pinned jars always carry (the menu only lists carrying jars)
     persist();render();return}
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
+  if(t.dataset.edit==='jcover'){setJarPlan(t.dataset.jid,'coverBy',bucketById(t.value)?t.value:null);persist();render();return}
   if(['bname','bamt','jamt','jname'].includes(t.dataset.edit))render();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('dev')){closeDev();return}if(document.getElementById('summary')){closeSummary();return}closeSheet()}if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][data-action]')){e.preventDefault();e.target.click();return}if(e.key==='Enter'&&e.target.id==='lq'){e.preventDefault();e.target.blur();return}if(e.key==='Enter'&&e.target.id==='emocustom'){e.preventDefault();const v=lastEmoji(e.target.value);if(v)applyEmoji(v);else toast('請輸入一個 emoji');return}if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){if(draft.ok&&!hasOp(draft.expr||''))saveDraft();return}

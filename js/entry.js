@@ -220,7 +220,8 @@ function openShared(jid,id){
     draft={editShared:{jid,id,ts:t.ts,split:t.split},type:'expense',amount:String(t.amount),date:t.date,note:t.note||'',catId:resolveCat(t.catKey)?t.catKey:null,mode:'pct'};
     openSheet(addHtml());return;
   }
-  const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'?'這是你每月從自己的罐子撥進共用罐的金額。要調整的話，到設定頁修改這個共用罐的「每月撥款」。':'這筆由你的帳本自動產生。';
+  const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'?'這是你每月從自己的罐子撥進共用罐的金額。要調整的話，到設定頁修改這個共用罐的「每月撥款」。'
+    :t.kind==='cover'?'共用罐這個月超支，依人數平分後，這是你的份額，從你設定的罐子墊付，不算支出。要調整的話，到設定頁修改這個共用罐的「共用罐超支時，我的份額從…扣」。':'這筆由你的帳本自動產生。';
   openSheet(`<ul class="txs">${sharedRow(t,true)}</ul><p class="note">${t.date}</p><p class="note">${why}</p>
     <button class="ghost" style="width:100%;margin-top:10px" data-action="close">關閉</button>`);
 }
