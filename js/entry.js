@@ -147,9 +147,11 @@ function updateHint(){
   if(d.type==='expense'){
     const c=resolveCat(d.catId);ok=ok&&!!c;
     if(c){const id=c.shared?SJ+c.jid:c.bucketId;const after=(c.shared?jarStats(c.jid,mk,exShared).bal:balanceOf(id,mk,d.editId))-amt;
-      const b=!c.shared&&bucketById(id),rem=remainderBucket();
-      if(b&&after<0&&!carries(b)&&rem&&rem.id!==b.id)
-        msg=`「<b>${esc(b.name)}</b>」只剩 ${money(after+amt)}，超出的 <span class="neg">${money(-after)}</span> 會由「<b>${esc(rem.name)}</b>」墊付`;
+      const b=!c.shared&&bucketById(id),cv=b&&coverOf(b);
+      // the jar's own balance before covering / being covered (what it covers for others doesn't trigger its own cover)
+      let own=0;if(cv){const s=stats(d.editId,mk)[id]||{bal:0};own=Math.max(0,s.bal-(s.over||0)+(s.covered||0))}
+      if(cv&&amt>own)
+        msg=`「<b>${esc(b.name)}</b>」只剩 ${money(own)}，超出的 <span class="neg">${money(amt-own)}</span> 會由「<b>${esc(cv.name)}</b>」墊付`;
       else msg=`從「<b>${esc(nameOf(id))}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
     else msg='選一個分類';
   }else if(d.type==='income'){
@@ -161,7 +163,7 @@ function updateHint(){
         a={};for(const k in a1)a[k]=a1[k]-(a0[k]||0);
         if(S.allocMode==='amount'){
           const P=planSum(mk),T=T0+amt;
-          const tail=P<=0?'還沒設定每月計畫金額，會全部放入「'+esc(remainderBucket().name)+'」':T>=P?(T>P?`本月收入 ${money(T)}，超過計畫 ${money(T-P)}，多的放入「${esc(remainderBucket().name)}」`:`本月收入剛好達到計畫 ${money(P)}`):`本月收入 ${money(T)}，還差 ${money(P-T)} 達到計畫，先依比例分配`;
+          const tail=P<=0?'還沒設定每月計畫金額，會全部放入「'+esc(excessBucket().name)+'」':T>=P?(T>P?`本月收入 ${money(T)}，超過計畫 ${money(T-P)}，多的放入「${esc(excessBucket().name)}」`:`本月收入剛好達到計畫 ${money(P)}`):`本月收入 ${money(T)}，還差 ${money(P-T)} 達到計畫，先依比例分配`;
           msg='<br>'+tail;
         }
       }

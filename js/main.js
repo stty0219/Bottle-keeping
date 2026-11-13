@@ -76,7 +76,11 @@ document.addEventListener('click',e=>{
       const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id)||Object.values(S.jarPlan||{}).some(jp=>(jp.hist||[]).some(x=>x.src===id&&+x.amt>0));
       if(S.buckets.length<=1){toast('至少要保留一個罐子');break}
       if(used){toast('這個罐子有紀錄或分類在用，先把分類改到別的罐子');break}
-      S.buckets=S.buckets.filter(b=>b.id!==id);if(S.remainderId===id)S.remainderId=S.buckets[S.buckets.length-1].id;persist();render();break}
+      S.buckets=S.buckets.filter(b=>b.id!==id);
+      for(const b of S.buckets)if(b.coverBy===id)b.coverBy=null;
+      if(S.excessTo===id)S.excessTo=fallbackPin().id;
+      if(S.sweepTo===id)S.sweepTo=fallbackPin().id;
+      persist();render();break}
     case 'addc':S.categories.push({id:uid(),emoji:'🏷️',name:'新分類',bucketId:S.buckets[0].id});persist();render();break;
     case 'delc':S.categories=S.categories.filter(c=>c.id!==id);persist();render();break;
     case 'export':exportData();break;
@@ -135,7 +139,11 @@ document.addEventListener('change',e=>{
   if(t.dataset.edit==='colorpick'){previewColor(t.value);return} // iPhone fires change mid-adjustment: only preview, the buttons apply / save
   if(t.dataset.edit==='sumsort'){try{localStorage.setItem(SORT_KEY,t.value)}catch(_){}rerenderSummary();return}
   if(t.dataset.edit==='motion'){try{localStorage.setItem(MOTION_KEY,t.value)}catch(_){}applyMotion();stopPieSpin();toast('已更新動態效果');return}
-  if(t.dataset.edit==='remainder'){S.remainderId=t.value;const b=bucketById(t.value);if(b&&b.carry===false){b.carry=true;toast(`「${b.name}」是指定罐子，已改為結轉`)}persist();render();return}
+  if(t.dataset.edit==='bcover'){const b=bucketById(t.dataset.id);if(b){b.coverBy=t.value&&t.value!==b.id?t.value:null;persist();render()}return}
+  if(t.dataset.edit==='excessTo'||t.dataset.edit==='sweepTo'){
+    const b=bucketById(t.value);if(!b)return;S[t.dataset.edit]=b.id;
+    if(b.carry===false)b.carry=true; // pinned jars always carry (the menu only lists carrying jars)
+    persist();render();return}
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
   if(['bname','bamt','jamt','jname'].includes(t.dataset.edit))render();
 });

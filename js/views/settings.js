@@ -25,15 +25,21 @@ function setSection(k,title,sum,badge,body,open){
 
 function settingsView(){
   const open=new Set(setOpenKeys()),sec=(k,t,s,b,h)=>setSection(k,t,s,b,h,open.has(k));
-  const rname=esc(remainderBucket()?.name||'');
+  const ex=excessBucket(),sw=sweepBucket(),exName=esc(ex?.name||'');
+  const pinWhy=b=>ex&&sw&&ex.id===b.id&&sw.id===b.id?'收入超過計畫的錢和歸零罐子的月底結算都放在這裡，一定會結轉'
+    :ex&&ex.id===b.id?'收入超過計畫的錢放在這裡，一定會結轉':'歸零罐子的月底結算放在這裡，一定會結轉';
+  const coverOpts=b=>`<option value="">不墊付</option>`+S.buckets.filter(o=>o.id!==b.id).map(o=>`<option value="${o.id}" ${o.id===b.coverBy?'selected':''}>${esc(o.name)}</option>`).join('');
   const bl=S.buckets.map(b=>`<div class="set-item amt-mode brow" data-id="${b.id}">
     <span class="dh" data-drag="bucket" aria-label="按住拖拉調整順序" title="按住拖拉調整順序">≡</span>
     <button class="swatch" style="background:${b.color}" data-action="colorpick" data-id="${b.id}" aria-label="換顏色"></button>
     <input type="text" value="${esc(b.name)}" data-edit="bname" data-id="${b.id}" aria-label="罐子名稱">
     <input type="number" inputmode="numeric" min="0" step="100" value="${+b.amt||0}" data-edit="bamt" data-id="${b.id}" aria-label="每月金額">
     <button class="icon-btn" data-action="delb" data-id="${b.id}" aria-label="刪除罐子">✕</button>
-    <label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${carries(b)?'checked':''} ${isRemainder(b)?'disabled':''}>${isRemainder(b)?'指定罐子，一定會結轉':'沒用完的錢結轉到下個月'}</label></div>`).join('');
+    <label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${carries(b)?'checked':''} ${isPinned(b)?'disabled':''}>${isPinned(b)?pinWhy(b):'沒用完的錢結轉到下個月'}</label>
+    <label class="carry cover">超支時從<select data-edit="bcover" data-id="${b.id}" aria-label="${esc(b.name)}超支時由哪個罐子墊付">${coverOpts(b)}</select>扣</label></div>`).join('');
   const opts=id=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
+  const carryOpts=id=>S.buckets.filter(carries).map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
+  const allocSum=!ex?'':ex.id===sw.id?ex.name:`多的→${ex.name}・結算→${sw.name}`;
   const copts=id=>opts(id)+jarsList().map(j=>`<option value="${SJ+j.id}" ${SJ+j.id===id?'selected':''}>${esc(j.name)}（共用）</option>`).join('');
   const cl=S.categories.map(c=>`<div class="set-item cat-item">
     <button class="emo" data-action="emopick" data-id="${c.id}" aria-label="更換圖示，目前是 ${esc(c.emoji)}">${esc(c.emoji)}</button>
@@ -56,12 +62,14 @@ function settingsView(){
   <p class="note">設定每個罐子每月要放多少錢。同一個月的收入會加總後依計畫分配；修改金額會重新計算所有月份。「全部放入一罐」的收入不受影響。按住左側的 ≡ 可以拖拉調整順序。</p>
   <div id="bucketList">${bl}</div>
   <div class="pctsum" id="plansum">每月計畫合計 <b class="num">${money(planSum())}</b></div>
-  ${planSum()?'':`<p class="note" style="color:var(--neg);margin:6px 0 0">還沒有設定每月金額，收入會全部放入「${rname}」。</p>`}
+  ${planSum()?'':`<p class="note" style="color:var(--neg);margin:6px 0 0">還沒有設定每月金額，收入會全部放入「${exName}」。</p>`}
   <button class="ghost" style="margin-top:12px" data-action="addb">新增罐子</button>
   <h3 class="sec-sub">共用罐</h3>
   ${sharedHtml()}`)
-  +sec('alloc','分配與結算',remainderBucket()?.name||'','',`<div class="plan-extra" style="margin-top:0"><label class="f">指定罐子：收入超過計畫的錢，以及歸零罐子月底的剩餘或超支，都由這個罐子承接<select data-edit="remainder">${opts(remainderBucket()?.id)}</select></label>
-  <p class="note" style="margin:0">不結轉的罐子每月從計畫重新開始：月底剩下的錢會轉入「${rname}」，超支的部分也由它補上。</p>
+  +sec('alloc','分配與結算',allocSum,'',`<div class="plan-extra" style="margin-top:0"><label class="f">收入超過計畫的錢放入<select data-edit="excessTo">${carryOpts(ex?.id)}</select></label>
+  <label class="f">歸零罐子月底的剩餘或不足放入<select data-edit="sweepTo">${carryOpts(sw?.id)}</select></label>
+  <p class="note" style="margin:0">這兩個選單只列出會結轉的罐子。不結轉的罐子每月從計畫重新開始，月底剩下的錢（或不足的部分）會結算進「${esc(sw?.name||'')}」。</p>
+  <p class="note" style="margin:0">罐子超支時由誰墊付，在「罐子」分區的每個罐子各自設定。</p>
   <p class="note" style="margin:0">收入不足計畫時，會依各罐計畫金額等比例分配。</p></div>`)
   +sec('cats','支出分類',`${S.categories.length} 個`,'',`<p class="note" style="margin-top:0">選了分類，就會自動從對應的罐子扣錢。</p>
   ${cl}

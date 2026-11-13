@@ -5,16 +5,16 @@ function sysItems(month,filter){
   const st=stats(null,month),rows=[],date=month+'-01',prev=shiftMonth(month,-1);
   const mlabel=mk=>mk===prev?'上月':(+mk.slice(5))+'月';
   const want=id=>filter==='all'||filter===id;
-  const rem=remainderBucket();
+  const sw=sweepBucket();
   for(const b of S.buckets){
     const s=st[b.id];if(!s||!want(b.id))continue;
     if(carries(b)){
-      const own=s.open-(rem&&rem.id===b.id?(s.sweep||0):0);
+      const own=s.open-(sw&&sw.id===b.id?(s.sweep||0):0);
       if(own)rows.push({sys:true,id:'sys_c_'+b.id,date,ts:-1,amount:own,color:b.color,jar:b.name,label:own>0?'上月結轉':'上月超支'});
     }
-    if(rem&&rem.id===b.id)for(const p of (s.sweepParts||[])){
+    if(sw&&sw.id===b.id)for(const p of (s.sweepParts||[])){
       const src=bucketById(p.id);if(!src)continue;
-      rows.push({sys:true,id:'sys_s_'+p.id,date,ts:-2,amount:p.amount,color:b.color,jar:b.name,label:mlabel(s.sweepMonth||prev)+src.name+(p.amount>0?'剩餘':'超支')});
+      rows.push({sys:true,id:'sys_s_'+p.id,date,ts:-2,amount:p.amount,color:b.color,jar:b.name,label:mlabel(s.sweepMonth||prev)+src.name+(p.amount>0?'剩餘':'不足')});
     }
   }
   for(const j of jarsList()){
@@ -26,13 +26,14 @@ function sysItems(month,filter){
 }
 // 月初結算: collapsed to one net line, expand for the individual carry-overs and settlements
 let coverOpen=false;
-function coverItems(month,filter){ // this month's overspending covered by the designated jar
-  const rem=remainderBucket();if(!rem)return [];
-  const s=stats(null,month)[rem.id]||{},rows=[];
-  for(const p of (s.coverParts||[])){
-    if(filter!=='all'&&filter!==rem.id&&filter!==p.id)continue;
-    const b=bucketById(p.id);if(!b)continue;
-    rows.push({sys:true,id:'cov_'+p.id,date:month+'-01',amount:-p.amount,color:b.color,jar:`由${rem.name}墊付`,label:`${b.name}超支`});
+function coverItems(month,filter){ // this month's overspending: which jar covered which, and how much
+  const st=stats(null,month),rows=[];
+  for(const cb of S.buckets){
+    for(const p of ((st[cb.id]||{}).coverParts||[])){
+      if(filter!=='all'&&filter!==cb.id&&filter!==p.id)continue;
+      const b=bucketById(p.id);if(!b)continue;
+      rows.push({sys:true,id:'cov_'+p.id,date:month+'-01',amount:-p.amount,color:b.color,jar:`由${cb.name}墊付`,label:`${b.name}超支`});
+    }
   }
   return rows;
 }
