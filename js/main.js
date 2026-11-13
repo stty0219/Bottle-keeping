@@ -25,6 +25,7 @@ document.addEventListener('click',e=>{
     case 'cadd':addMyColor();break;
     case 'cedit':toggleColorEdit();break;
     case 'cdel':delMyColor(el.dataset.c);break;
+    case 'setsec':toggleSection(el.dataset.k);break;
     case 'vertap':verTap();break;
     case 'devopen':openDev('home');break;
     case 'devgo':devView=el.dataset.v;devRender();break;

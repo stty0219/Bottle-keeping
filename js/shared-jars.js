@@ -195,6 +195,6 @@ function sharedHtml(){
       <button class="ghost" data-action="jaddc" data-jid="${j.id}">新增共用分類</button>
       ${owner?`<button class="ghost danger" data-action="deljar" data-jid="${j.id}">刪除共用罐</button>`:`<button class="ghost danger" data-action="leavejar" data-jid="${j.id}">退出共用</button>`}
     </div>`}).join('');
-  return `${verifyHtml()}${invitesHtml()}<div style="display:grid;gap:12px">${cards}</div>
+  return `${invitesHtml()}<div style="display:grid;gap:12px">${cards}</div>
     <button class="ghost" style="margin-top:12px" data-action="newjar">新增共用罐子</button>`;
 }
