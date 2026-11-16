@@ -21,6 +21,18 @@ function applyShelf(ids){
 function applyBucketOrder(bids){ // settings only reorders personal jars; shared jars keep their places
   let k=0;applyShelf(shelfIds().map(id=>isSJ(id)?id:bids[k++]));
 }
+// expense categories reorder within their own jar: personal ones are S.categories' order, shared ones the jar's categories order
+function applyCatOrder(grp,ids){
+  if(isSJ(grp)){
+    const jid=sjId(grp),j=Cloud.jars[jid];if(!j)return;
+    const cs=j.categories||[],by={};cs.forEach(c=>by[c.id]=c);
+    j.categories=ids.map(id=>by[id]).filter(Boolean).concat(cs.filter(c=>!ids.includes(c.id)));
+    saveJarMeta(jid,['categories']);render();return;
+  }
+  const by={};S.categories.forEach(c=>by[c.id]=c);let k=0;
+  S.categories=S.categories.map(c=>c.bucketId===grp&&ids.includes(c.id)?by[ids[k++]]:c); // other groups keep their slots
+  persist();render();
+}
 
 /* drag engine: o = {el, items, axis:'x'|'y', scroller (element or window), x, y, onDrop(from,to)} */
 let sortState=null;
@@ -94,4 +106,13 @@ document.addEventListener('pointerdown',e=>{
   const items=[...list.querySelectorAll('.set-item.brow')];
   try{h.setPointerCapture(e.pointerId)}catch(_){}
   startSort({el:row,items,axis:'y',scroller:window,container:list,x:e.clientX,y:e.clientY,onDrop:(f,t)=>applyBucketOrder(moved(items.map(n=>n.dataset.id),f,t))});
+});
+// settings: drag a category's ≡ handle, only within its jar's group
+document.addEventListener('pointerdown',e=>{
+  const h=e.target.closest('[data-drag="cat"]');if(!h||e.button>0)return;
+  e.preventDefault();
+  const row=h.closest('.set-item'),list=row&&row.closest('.cgrp-list');if(!list)return;
+  const items=[...list.children].filter(n=>n.classList.contains('set-item'));
+  try{h.setPointerCapture(e.pointerId)}catch(_){}
+  startSort({el:row,items,axis:'y',scroller:window,container:list,x:e.clientX,y:e.clientY,onDrop:(f,t)=>applyCatOrder(list.dataset.grp,moved(items.map(n=>n.dataset.id),f,t))});
 });

@@ -72,7 +72,7 @@ js/
   color.js             罐子顏色面板、依底色決定文字顏色
   entry.js             記一筆／編輯：計算機鍵盤、分類列、存檔
   ui.js                提示訊息（含復原）、左滑刪除
-  reorder.js           罐子排序：總覽長按拖拉、設定頁 ≡ 把手
+  reorder.js           拖拉排序：總覽長按罐子、設定頁罐子與分類（組內）的 ≡ 把手
   main.js              事件分派，最後呼叫 init() 啟動
 ```
 
@@ -80,7 +80,7 @@ js/
 
 全域狀態 `S`（本機存在 localStorage，登入後與 Firestore 同步）：
 - `buckets[]`：個人罐子 `{id, name, color, amt, carry, coverBy}`；`carry:false` 表示每月歸零；`coverBy` 是超支時墊付的個人罐子 id（`null` 不墊付，不能是自己）
-- `categories[]`：分類 `{id, emoji, name, bucketId}`；`bucketId` 可以是共用罐 `sj:<jarId>`
+- `categories[]`：分類 `{id, emoji, name, bucketId}`；`bucketId` 只能是個人罐子；陣列順序就是設定頁與分類面板中各組內的順序。v33 以前可以是共用罐 `sj:<jarId>`，v34 起由 `migrateSharedCats()`（共用罐清單由伺服器確認後執行）轉成該共用罐的共用分類，已不是成員則改扣第一個個人罐子
 - `txns[]`：收入 `income`（`mode:'pct'` 代表依每月計畫分配、`'one'` 代表全部放入 `target`）、支出 `expense`、轉移 `transfer`
 - `allocMode`：固定為 `'amount'`（比例模式已移除，舊資料由 `migrateAlloc()` 轉換）
 - `excessTo`：收入超過計畫的錢放入的罐子；`sweepTo`：歸零罐子月底的剩餘或不足放入的罐子（兩者都一定結轉，找不到時退回最後一個會結轉的罐子）
@@ -93,7 +93,7 @@ Firestore：
 ```
 ledgers/{ledgerId}            個人帳本（只有本人能讀寫），欄位同上
 ledgers/{ledgerId}/txns/{id}  個人紀錄
-jars/{jarId}                  共用罐：owner, members[], memberInfo{}, name, color, categories[]
+jars/{jarId}                  共用罐：owner, members[], memberInfo{}, name, color, categories[]（共用分類，順序即顯示順序，在設定頁「支出分類」管理）
 jars/{jarId}/txns/{id}        共用罐紀錄：kind = expense | contrib | in | withdraw | cover；by = 記錄者；split = 記錄當下人數；src/srcId = 撥款、墊付的來源罐子
 invites/{email}_{jarId}       共用邀請
 ```

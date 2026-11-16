@@ -1,7 +1,7 @@
 // Firebase 登入後的雲端同步：帳本、紀錄、寫入流程
 /* ---------- cloud (Firebase) ---------- */
 const Cloud={ready:false,user:null,fs:null,auth:null,ref:null,unsubs:[],metaTimer:null,err:'',busy:false,
-  ledgerLoaded:false,jars:{},jarTxns:{},jarLoaded:{},jarUnsubs:{},jarsUnsub:null,inviteUnsubs:[],invites:[],sent:[],jarTimers:{},jarsLoaded:false};
+  ledgerLoaded:false,jars:{},jarTxns:{},jarLoaded:{},jarUnsubs:{},jarsUnsub:null,inviteUnsubs:[],invites:[],sent:[],jarTimers:{},jarsLoaded:false,jarsFresh:false};
 function cloudConfigured(){return !!(window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.apiKey&&window.firebase)}
 function cloudOn(){return !!(Cloud.user&&Cloud.ref)}
 function syncStatus(){
@@ -82,7 +82,7 @@ function subscribe(ref){
     if(snap.metadata.hasPendingWrites)return;
     const d=snap.data();
     S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.excessTo=d.excessTo||null;S.sweepTo=d.sweepTo||null;S.jarPlan=d.jarPlan||{};S.gradeRules=d.gradeRules||null;S.gradeComments=d.gradeComments||null;S.sumTheme=d.sumTheme||null;S.shelfOrder=d.shelfOrder||null;S.themeText=d.themeText||null;S.ledgerName=d.name||'我的帳本';S.myColors=d.myColors;
-    const mig=migrateAlloc()|migrateCover()|migrateJarPlan()|migrateTheme()|migrateColors();saveLocal();safeRender();if(mig)persist();
+    const mig=migrateAlloc()|migrateCover()|migrateJarPlan()|migrateTheme()|migrateColors()|migrateSharedCats();saveLocal();safeRender();if(mig)persist();
     if(!Cloud.ledgerLoaded){Cloud.ledgerLoaded=true;startJars()}
     scheduleMirror();
   },fail));

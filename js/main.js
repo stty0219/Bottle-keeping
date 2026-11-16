@@ -26,6 +26,7 @@ document.addEventListener('click',e=>{
     case 'cedit':toggleColorEdit();break;
     case 'cdel':delMyColor(el.dataset.c);break;
     case 'setsec':toggleSection(el.dataset.k);break;
+    case 'catgrp':toggleCatGroup(el.dataset.k);break;
     case 'vertap':verTap();break;
     case 'devopen':openDev('home');break;
     case 'devgo':devView=el.dataset.v;devRender();break;
@@ -82,7 +83,7 @@ document.addEventListener('click',e=>{
       if(S.excessTo===id)S.excessTo=fallbackPin().id;
       if(S.sweepTo===id)S.sweepTo=fallbackPin().id;
       persist();render();break}
-    case 'addc':S.categories.push({id:uid(),emoji:'🏷️',name:'新分類',bucketId:S.buckets[0].id});persist();render();break;
+    case 'addc':S.categories.push({id:uid(),emoji:'🏷️',name:'新分類',bucketId:bucketById(el.dataset.b)?el.dataset.b:S.buckets[0].id});persist();render();break;
     case 'delc':S.categories=S.categories.filter(c=>c.id!==id);persist();render();break;
     case 'export':exportData();break;
     case 'csv':exportCSV();break;
@@ -129,7 +130,10 @@ document.addEventListener('change',e=>{
     if(t.id==='from'){draft.from=t.value;updateHint();return}
     if(t.id==='to'){draft.to=t.value;updateHint();return}
   }
-  if(t.dataset.edit==='cbucket'){catById(t.dataset.id).bucketId=t.value;persist();render()}
+  if(t.dataset.edit==='cbucket'){ // moves to the end of its new jar's group
+    const c=catById(t.dataset.id),b=bucketById(t.value);if(!c||!b)return;
+    c.bucketId=b.id;S.categories=S.categories.filter(x=>x!==c).concat([c]);
+    persist();render();toast(`「${c.name}」已移到「${b.name}」`);return}
   if(t.dataset.edit==='gr'){
     const r=gradeRules(),k=t.dataset.k;let v=Math.max(0,parseInt(t.value)||0);
     if(k==='bMaxOver')r.bMaxOver=Math.min(20,v);

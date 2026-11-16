@@ -34,7 +34,8 @@
 
 **記帳與瀏覽**
 - 計算機鍵盤：可直接輸入 `120 + 85 × 2` 這類算式（先乘除後加減）。
-- 常用分類列依使用次數排序，另有完整的分類面板。
+- 常用分類列依使用次數排序，另有依罐子分組的完整分類面板。
+- 設定頁的支出分類依罐子分組（可展開、收合，組內可拖拉排序）；個人分類只扣個人罐子，共用支出使用共用罐的共用分類。
 - 總覽可切換月份；可以提前記錄未來月份，且不影響當月的金額。
 - 明細：每日總支出、支出比例圓餅圖（依罐子或分類）、備註關鍵字搜尋（可搜尋所有月份）、左滑刪除與復原。
 
@@ -91,7 +92,7 @@ js/
   sheet.js             底部表單、emoji 面板
   entry.js             記一筆：計算機、分類、存檔
   ui.js                提示訊息與左滑刪除
-  reorder.js　         罐子排序：總覽長按拖拉、設定頁把手拖拉
+  reorder.js　         拖拉排序：總覽長按罐子、設定頁罐子與分類（組內）的把手
   main.js              事件處理，最後啟動 App
 
 firebase-config.js     Firebase 專案設定（公開資訊，必須 push）
@@ -106,7 +107,7 @@ icon-192.png / icon-512.png / apple-touch-icon.png
 ledgers/{ledgerId}                 個人帳本，只有本人能讀寫
   owner, members[]
   buckets[]        罐子：名稱、顏色、比例、每月金額、是否結轉、coverBy（超支時由哪個罐子墊付）
-  categories[]     分類 → 扣款罐子
+  categories[]     分類 → 扣款罐子（只能是個人罐子；陣列順序即顯示順序）
   allocMode        'amount' | 'pct'
   excessTo         收入超過計畫的錢放入的罐子
   sweepTo          歸零罐子月底的剩餘或不足放入的罐子
@@ -118,7 +119,7 @@ ledgers/{ledgerId}                 個人帳本，只有本人能讀寫
 ledgers/{ledgerId}/txns/{id}       收入 / 支出 / 轉移
 
 jars/{jarId}                       共用罐
-  owner, members[], memberInfo{}, name, color, categories[]
+  owner, members[], memberInfo{}, name, color, categories[]（共用分類，陣列順序即顯示順序）
 
 jars/{jarId}/txns/{id}             共用罐紀錄，by = 記錄者
   kind: expense | contrib | in | withdraw | cover（超支墊付，id = cover_{uid}_{月份}）
@@ -230,3 +231,4 @@ invites/{email}_{jarId}            共用邀請
 | v31 | 設定頁整理成可展開、收合的分區（帳號與同步、罐子、分配與結算、支出分類、資料、顯示），展開狀態記在這台裝置 |
 | v32 | 取消指定罐子：每個罐子可設定超支時由哪個罐子墊付（不連鎖），另分別設定收入超過計畫與歸零罐子月底結算放入的罐子；明細列出墊付關係 |
 | v33 | 共用罐超支依人數平分，每個成員可設定自己的份額由哪個罐子墊付；共用罐標示誰尚未墊付 |
+| v34 | 設定頁的支出分類依罐子分組，可展開、收合與組內拖拉排序；共用分類移到支出分類管理；個人分類不再扣共用罐，舊設定自動轉為共用分類 |
