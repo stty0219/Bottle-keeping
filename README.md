@@ -50,7 +50,7 @@
 
 | 項目 | 使用技術 |
 |---|---|
-| 前端 | 單一 `index.html`（HTML + CSS + 原生 JavaScript），不使用框架、沒有建置流程 |
+| 前端 | `index.html` 加上 `css/`、`js/` 的多個檔案（HTML + CSS + 原生 JavaScript，以一般 `<script>` 依序載入），不使用框架、沒有建置流程 |
 | 離線 | Service Worker（`sw.js`），App 本身網路優先、離線時使用快取 |
 | 帳號 | Firebase Authentication（Google、Email／密碼） |
 | 資料庫 | Cloud Firestore，開啟離線持久化 |
@@ -75,7 +75,8 @@ css/
   themes.css           7 種結算風格
 js/
   color.js　罐子顏色面板（推薦色、我的顏色）與文字顏色自動調整
-  config.js            APP_VERSION 與 RELEASE（改版只改這個檔案）
+  config.js            APP_VERSION（版本號）
+  changelog.js         CHANGELOG：每個版本的更新紀錄（通知鈴鐺與開發者選項的更新紀錄）
   state.js             共用工具、預設資料、全域狀態
   cloud.js             Firebase 同步
   shared-jars.js       共用罐
@@ -181,12 +182,12 @@ invites/{email}_{jarId}            共用邀請
 
 ## 開發慣例
 
-- **版本號與更新內容**：只改 `js/config.js` 的 `APP_VERSION` 和 `RELEASE`。新增或刪除 `css/`、`js/` 的檔案時，記得同步更新 `index.html` 的載入清單和 `sw.js` 的 `CORE` 清單。
+- **版本號與更新內容**：`js/config.js` 的 `APP_VERSION` 加一，並在 `js/changelog.js` 的 `CHANGELOG` 最上方新增一筆（兩邊版本號不一致時，Console 與開發者選項的更新紀錄會出現提醒）。新增或刪除 `css/`、`js/` 的檔案時，記得同步更新 `index.html` 的載入清單和 `sw.js` 的 `CORE` 清單。
 - **Commit 訊息**：`feat: vXX，…` / `fix: vXX，…` / `chore: …`（不影響功能的維護性改動，不跳版本號）。
 - **修改 `firestore.rules` 時**，記得同步貼到 Firebase 主控台，並在 commit 內文註明。
 - **多裝置測試**：所有裝置都要更新到同一個版本。不同版本的裝置同時開著時，可能會互相覆蓋共用罐的撥款紀錄。
 - **不要 push 匯出的備份 JSON 與 CSV**：這個儲存庫就是網站的根目錄，push 上去的檔案任何人都能用網址讀取（已列在 `.gitignore`）。
-- **更新內容**：改版時一併更新 `index.html` 中 `APP_VERSION` 下方的 `RELEASE`，使用者會在通知鈴鐺看到。
+- **更新內容**：用給使用者看的口吻撰寫；通知鈴鐺顯示 `CHANGELOG` 的第一筆，開發者選項的「更新紀錄」列出所有版本。
 
 ### 待辦
 
@@ -232,3 +233,4 @@ invites/{email}_{jarId}            共用邀請
 | v32 | 取消指定罐子：每個罐子可設定超支時由哪個罐子墊付（不連鎖），另分別設定收入超過計畫與歸零罐子月底結算放入的罐子；明細列出墊付關係 |
 | v33 | 共用罐超支依人數平分，每個成員可設定自己的份額由哪個罐子墊付；共用罐標示誰尚未墊付 |
 | v34 | 設定頁的支出分類依罐子分組，可展開、收合與組內拖拉排序；共用分類移到支出分類管理；個人分類不再扣共用罐，舊設定自動轉為共用分類 |
+| v35 | 開發者選項新增「更新紀錄」，列出每個版本的新功能、改善與修正；更新內容改由 `js/changelog.js` 管理 |

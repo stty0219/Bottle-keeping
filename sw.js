@@ -19,6 +19,7 @@ const CORE=[
   './css/summary.css',
   './css/themes.css',
   './js/config.js',
+  './js/changelog.js',
   './js/state.js',
   './js/cloud.js',
   './js/shared-jars.js',
