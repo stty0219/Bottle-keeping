@@ -23,6 +23,48 @@ function setSection(k,title,sum,badge,body,open){
   <div class="sec-b" id="sec-${k}" ${open?'':'hidden'}>${body}</div></section>`;
 }
 
+/* expense categories: one collapsible group per jar, in overview order; open groups are per device */
+const CAT_OPEN_KEY='fenguan-catopen';
+function catOpenKeys(){try{const v=JSON.parse(localStorage.getItem(CAT_OPEN_KEY));if(Array.isArray(v))return v}catch(e){}return []} // default: all collapsed
+function toggleCatGroup(k){
+  const open=new Set(catOpenKeys()),on=!open.has(k);
+  on?open.add(k):open.delete(k);
+  try{localStorage.setItem(CAT_OPEN_KEY,JSON.stringify([...open]))}catch(e){}
+  const body=document.getElementById('cg-'+k),h=body&&body.previousElementSibling;
+  if(h)h.setAttribute('aria-expanded',on);
+  if(body)body.hidden=!on;
+}
+function catGroupsHtml(){
+  const open=new Set(catOpenKeys());let n=0;
+  const bopts=id=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
+  const emo=(c,jid)=>`<button class="emo" data-action="emopick" ${jid?`data-jid="${jid}" `:''}data-id="${c.id}" aria-label="更換圖示，目前是 ${esc(c.emoji)}">${esc(c.emoji)}</button>`;
+  const dh='<span class="dh" data-drag="cat" aria-label="按住拖拉調整順序" title="按住拖拉調整順序">≡</span>';
+  const group=(k,name,color,shared,rows,count,lead,foot)=>{n+=count;const on=open.has(k);
+    return `<div class="cgrp">
+    <button class="cgrp-h" data-action="catgrp" data-k="${esc(k)}" aria-expanded="${on}" aria-controls="cg-${esc(k)}">
+      <span class="dot" style="background:${color}"></span><span class="cgrp-t">${esc(name)}<span class="cgrp-n">・${count} 個</span></span>${shared?'<span class="pill">共用</span>':''}<span class="chev" aria-hidden="true">›</span></button>
+    <div class="cgrp-b" id="cg-${esc(k)}" ${on?'':'hidden'}>${lead}<div class="cgrp-list" data-grp="${esc(k)}">${rows}</div>${foot}</div></div>`};
+  const html=shelfIds().map(id=>{
+    if(isSJ(id)){
+      const jid=sjId(id),j=Cloud.jars[jid];if(!j)return '';
+      const cs=j.categories||[];
+      const rows=cs.map(c=>`<div class="set-item cat-item crow jc" data-id="${c.id}">${dh}${emo(c,jid)}
+        <input type="text" value="${esc(c.name)}" data-edit="jcname" data-jid="${jid}" data-id="${c.id}" aria-label="分類名稱">
+        <button class="icon-btn" data-action="jdelc" data-jid="${jid}" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
+      return group(id,j.name,j.color,true,rows,cs.length,'<p class="note cgrp-lead">共用分類由所有成員共用，修改會影響其他成員。</p>',
+        `<button class="ghost cgrp-add" data-action="jaddc" data-jid="${jid}">新增分類</button>`);
+    }
+    const b=bucketById(id);if(!b)return '';
+    const cs=S.categories.filter(c=>c.bucketId===b.id);
+    const rows=cs.map(c=>`<div class="set-item cat-item crow" data-id="${c.id}">${dh}${emo(c)}
+      <input type="text" value="${esc(c.name)}" data-edit="cname" data-id="${c.id}" aria-label="分類名稱">
+      <select data-edit="cbucket" data-id="${c.id}" aria-label="扣款罐子">${bopts(c.bucketId)}</select>
+      <button class="icon-btn" data-action="delc" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
+    return group(b.id,b.name,b.color,false,rows,cs.length,'',`<button class="ghost cgrp-add" data-action="addc" data-b="${b.id}">新增分類</button>`);
+  }).join('');
+  return {html,n};
+}
+
 function settingsView(){
   const open=new Set(setOpenKeys()),sec=(k,t,s,b,h)=>setSection(k,t,s,b,h,open.has(k));
   const ex=excessBucket(),sw=sweepBucket(),exName=esc(ex?.name||'');
@@ -37,15 +79,9 @@ function settingsView(){
     <button class="icon-btn" data-action="delb" data-id="${b.id}" aria-label="刪除罐子">✕</button>
     <label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${carries(b)?'checked':''} ${isPinned(b)?'disabled':''}>${isPinned(b)?pinWhy(b):'沒用完的錢結轉到下個月'}</label>
     <label class="carry cover">超支時從<select data-edit="bcover" data-id="${b.id}" aria-label="${esc(b.name)}超支時由哪個罐子墊付">${coverOpts(b)}</select>扣</label></div>`).join('');
-  const opts=id=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
   const carryOpts=id=>S.buckets.filter(carries).map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
   const allocSum=!ex?'':ex.id===sw.id?ex.name:`多的→${ex.name}・結算→${sw.name}`;
-  const copts=id=>opts(id)+jarsList().map(j=>`<option value="${SJ+j.id}" ${SJ+j.id===id?'selected':''}>${esc(j.name)}（共用）</option>`).join('');
-  const cl=S.categories.map(c=>`<div class="set-item cat-item">
-    <button class="emo" data-action="emopick" data-id="${c.id}" aria-label="更換圖示，目前是 ${esc(c.emoji)}">${esc(c.emoji)}</button>
-    <input type="text" value="${esc(c.name)}" data-edit="cname" data-id="${c.id}" aria-label="分類名稱">
-    <select data-edit="cbucket" data-id="${c.id}" aria-label="扣款罐子">${copts(c.bucketId)}</select>
-    <button class="icon-btn" data-action="delc" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
+  const cats=catGroupsHtml();
 
   // summaries and alerts (alerts show even when the section is collapsed)
   const u=Cloud.user;
@@ -71,9 +107,8 @@ function settingsView(){
   <p class="note" style="margin:0">這兩個選單只列出會結轉的罐子。不結轉的罐子每月從計畫重新開始，月底剩下的錢（或不足的部分）會結算進「${esc(sw?.name||'')}」。</p>
   <p class="note" style="margin:0">罐子超支時由誰墊付，在「罐子」分區的每個罐子各自設定。</p>
   <p class="note" style="margin:0">收入不足計畫時，會依各罐計畫金額等比例分配。</p></div>`)
-  +sec('cats','支出分類',`${S.categories.length} 個`,'',`<p class="note" style="margin-top:0">選了分類，就會自動從對應的罐子扣錢。</p>
-  ${cl}
-  <button class="ghost" style="margin-top:12px" data-action="addc">新增分類</button>`)
+  +sec('cats','支出分類',`${cats.n} 個`,'',`<p class="note" style="margin-top:0">選了分類，就會自動從對應的罐子扣錢。按住左側的 ≡ 可以在同一個罐子內拖拉調整順序。</p>
+  <div class="cgrps">${cats.html}</div>`)
   +sec('data','資料',cloudOn()?'已同步':'只存在這台裝置','',`<p class="note" style="margin-top:0">${cloudOn()?'資料已同步到雲端，這台裝置也保留一份，離線時照常可用。':'資料只存在這台裝置的瀏覽器中。換手機或清除瀏覽器資料前，請先匯出備份，或登入帳號開啟雲端同步。'}</p>
   <div class="filters">
   <button class="ghost" data-action="export">匯出備份</button>

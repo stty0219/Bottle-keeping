@@ -14,7 +14,7 @@ function stopJars(){
   if(Cloud.jarsUnsub){try{Cloud.jarsUnsub()}catch(e){}}Cloud.jarsUnsub=null;
   for(const id in Cloud.jarUnsubs){try{Cloud.jarUnsubs[id]()}catch(e){}}
   Cloud.inviteUnsubs.forEach(f=>{try{f()}catch(e){}});
-  Object.assign(Cloud,{jars:{},jarTxns:{},jarLoaded:{},jarUnsubs:{},inviteUnsubs:[],invites:[],sent:[],jarsLoaded:false});
+  Object.assign(Cloud,{jars:{},jarTxns:{},jarLoaded:{},jarUnsubs:{},inviteUnsubs:[],invites:[],sent:[],jarsLoaded:false,jarsFresh:false});
 }
 function startJars(){
   if(!cloudOn()||Cloud.jarsUnsub)return;
@@ -36,6 +36,8 @@ function startJars(){
       for(const id in S.jarPlan){if(!Cloud.jars[id]&&!S.jarPlan[id].until){S.jarPlan[id].until=shiftMonth(curMonth(),1);changed=true}}
     }
     Cloud.jarsLoaded=true;
+    if(!qs.metadata.fromCache)Cloud.jarsFresh=true; // membership confirmed by the server, not just the offline cache
+    if(migrateSharedCats())changed=true;
     if(changed)persist();
     safeRender();scheduleMirror();
   },e=>{Cloud.err='共用罐同步中斷：'+(e.code||e.message);renderIfSettings()});
@@ -54,6 +56,26 @@ function watchInvites(){
   if(Cloud.user.emailVerified&&myEmail()){
     Cloud.inviteUnsubs.push(col.where('email','==',myEmail()).onSnapshot(qs=>{Cloud.invites=qs.docs.map(d=>Object.assign({id:d.id},d.data()));safeRender()},()=>{}));
   }
+}
+
+/* v34: a personal category can no longer charge a shared jar. Once the ledger and the server's jar list are in:
+   still a member → the jar gets a shared category with the same name and emoji (unless it already has one), the personal one is removed;
+   no longer a member → keep it, charged to the first personal jar (last in that group).
+   Past shared expenses keep showing their own saved name and emoji. */
+function migrateSharedCats(){
+  if(!cloudOn()||!Cloud.ledgerLoaded||!Cloud.jarsFresh||!S.buckets.length)return false;
+  const old=S.categories.filter(c=>isSJ(c.bucketId));if(!old.length)return false;
+  const touched=new Set(),kept=[];
+  for(const c of old){
+    const jid=sjId(c.bucketId),j=Cloud.jars[jid];
+    if(j){const cs=j.categories||(j.categories=[]);
+      if(!cs.some(x=>x.name===c.name&&x.emoji===c.emoji))cs.push({id:uid(),emoji:c.emoji,name:c.name});
+      touched.add(jid)}
+    else{c.bucketId=S.buckets[0].id;kept.push(c)}
+  }
+  S.categories=S.categories.filter(c=>!old.includes(c)).concat(kept);
+  touched.forEach(jid=>saveJarMeta(jid,['categories']));
+  return true;
 }
 
 /* contributions and transfers I make are mirrored into the shared jar so every member sees them */
@@ -181,10 +203,6 @@ function sharedHtml(){
     const owner=j.owner===me,jp=(S.jarPlan||{})[j.id]||{};
     const members=(j.members||[]).map(u=>`<div class="mem"><span>${esc(memberName(j,u))}${u===j.owner?'（擁有者）':''}${u===me?'・你':''}</span>${owner&&u!==me?`<button class="icon-btn" data-action="rmmember" data-jid="${j.id}" data-id="${u}" aria-label="移除成員">✕</button>`:''}</div>`).join('');
     const pend=owner?Cloud.sent.filter(x=>x.jid===j.id).map(x=>`<div class="mem"><span class="note">${esc(x.email)}・等待接受</span><button class="icon-btn" data-action="uninvite" data-id="${esc(x.id)}" aria-label="取消邀請">✕</button></div>`).join(''):'';
-    const cats=(j.categories||[]).map(c=>`<div class="set-item cat-item jc">
-      <button class="emo" data-action="emopick" data-jid="${j.id}" data-id="${c.id}" aria-label="更換圖示，目前是 ${esc(c.emoji)}">${esc(c.emoji)}</button>
-      <input type="text" value="${esc(c.name)}" data-edit="jcname" data-jid="${j.id}" data-id="${c.id}" aria-label="分類名稱">
-      <button class="icon-btn" data-action="jdelc" data-jid="${j.id}" data-id="${c.id}" aria-label="刪除分類">✕</button></div>`).join('');
     return `<div class="acct jarcard">
       <div class="jhead"><button class="swatch" style="background:${j.color}" ${owner?`data-action="colorpick" data-jid="${j.id}"`:'disabled'} aria-label="換顏色"></button>
         <input type="text" value="${esc(j.name)}" data-edit="jname" data-jid="${j.id}" ${owner?'':'disabled'} aria-label="共用罐名稱"><span class="pill">共用</span></div>
@@ -196,8 +214,7 @@ function sharedHtml(){
         <div class="note" style="margin-top:-4px">共用罐這個月新產生的超支，依目前人數平分。不墊付的話，你的份額會讓共用罐維持負數，並標示你尚未墊付。修改從這個月開始生效。</div>`})()}
       <div class="sub">成員</div>${members}${pend}
       ${owner?`<div class="invrow"><input type="email" id="inv-${j.id}" placeholder="對方登入用的 Email" inputmode="email"><button class="gbtn" data-action="invite" data-jid="${j.id}">邀請</button></div>`:''}
-      <div class="sub">共用分類</div>${cats}
-      <button class="ghost" data-action="jaddc" data-jid="${j.id}">新增共用分類</button>
+      <div class="note">共用分類在「支出分類」分區的「${esc(j.name)}」裡管理。</div>
       ${owner?`<button class="ghost danger" data-action="deljar" data-jid="${j.id}">刪除共用罐</button>`:`<button class="ghost danger" data-action="leavejar" data-jid="${j.id}">退出共用</button>`}
     </div>`}).join('');
   return `${invitesHtml()}<div style="display:grid;gap:12px">${cards}</div>

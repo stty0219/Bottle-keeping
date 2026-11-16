@@ -37,3 +37,20 @@
 .sec-b{padding:0 0 18px}
 .sec-sub{font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 6px}
 .sec-b>.sec-sub:first-child{margin-top:0}
+
+/* 支出分類：依罐子分組、可展開收合，組內按住 ≡ 拖拉 */
+.cgrp{border-top:1px solid var(--line)}
+.cgrp-h{width:100%;display:flex;align-items:center;gap:6px;background:none;border:0;padding:12px 2px;color:var(--ink);text-align:left;min-height:48px;font-size:15px}
+.cgrp-h .dot{flex:none;margin:0 2px 0 0}
+.cgrp-t{flex:1;min-width:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cgrp-n{font-weight:400;color:var(--muted)}
+.cgrp-h .pill{flex:none;margin:0}
+.cgrp-h .chev{flex:none;display:inline-block;width:14px;text-align:center;color:var(--muted);font-size:18px;line-height:1;transition:transform .2s}
+.cgrp-h[aria-expanded="true"] .chev{transform:rotate(90deg)}
+:root[data-motion="reduce"] .cgrp-h .chev{transition:none}
+.cgrp-b{padding:0 0 14px}
+.cgrp-lead{margin:0 0 4px}
+.cgrp-list>.set-item:last-child{border-bottom:0}
+.cgrp-add{margin-top:8px}
+.set-item.cat-item.crow{grid-template-columns:24px 48px minmax(0,1fr) minmax(0,1fr) 36px}
+.set-item.cat-item.crow.jc{grid-template-columns:24px 48px minmax(0,1fr) 36px}

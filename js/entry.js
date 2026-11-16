@@ -95,8 +95,7 @@ function topCats(n){
 }
 function catPickerHtml(){
   const opts=catOptions(),groups=[];
-  for(const b of S.buckets){const cs=opts.filter(c=>c.group===b.id);if(cs.length)groups.push([b.name,cs])}
-  for(const j of jarsList()){const cs=opts.filter(c=>c.group===SJ+j.id);if(cs.length)groups.push([j.name+'（共用）',cs])}
+  for(const id of shelfIds()){const cs=opts.filter(c=>c.group===id);if(cs.length)groups.push([nameOf(id),cs])} // overview order; within a group, the settings order
   return `<div class="pkhead"><button data-action="catback" aria-label="返回">‹ 返回</button><b>選擇分類</b></div>
     ${groups.map(([n,cs])=>`<div class="catgroup">${esc(n)}</div><div class="cats">${cs.map(c=>`<button class="cat" data-action="catpick" data-id="${esc(c.key)}" aria-pressed="${draft.catId===c.key}"><span class="e">${esc(c.emoji)}</span>${esc(c.name)}<span class="dot" style="background:${c.color};margin:2px 0 0"></span></button>`).join('')}</div>`).join('')}`;
 }
