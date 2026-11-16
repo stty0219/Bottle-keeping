@@ -29,7 +29,8 @@ document.addEventListener('click',e=>{
     case 'catgrp':toggleCatGroup(el.dataset.k);break;
     case 'vertap':verTap();break;
     case 'devopen':openDev('home');break;
-    case 'devgo':devView=el.dataset.v;devRender();break;
+    case 'devgo':devView=el.dataset.v;if(devView==='changelog')clOpen=new Set(CHANGELOG.length?[CHANGELOG[0].v]:[]);devRender();break;
+    case 'clsec':{const v=el.dataset.v;if(clOpen.has(v))clOpen.delete(v);else clOpen.add(v);devRender(true);break}
     case 'devclose':closeDev();break;
     case 'devoff':try{localStorage.setItem(DEV_KEY,'0')}catch(_){}closeDev();render();toast('已關閉開發者模式');break;
     case 'grreset':S.gradeRules=null;persist();devRender(true);toast('已恢復預設條件');break;

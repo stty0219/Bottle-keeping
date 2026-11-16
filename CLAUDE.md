@@ -54,20 +54,21 @@ css/
   summary.css          月結算的共用版面與動畫
   themes.css           月結算的 7 種風格（.th-<id>）
 js/
-  config.js            APP_VERSION 與 RELEASE（改版只改這裡）
+  config.js            APP_VERSION（新版本偵測會讀取線上的這個檔案）
+  changelog.js         CHANGELOG：所有版本的更新紀錄（由新到舊；鈴鐺顯示第一筆，開發者選項列出全部）
   state.js             共用工具、預設資料、全域狀態 S、本機儲存
   cloud.js             Firebase 同步：帳本、紀錄、寫入流程
   shared-jars.js       共用罐：成員、邀請、撥款與超支墊付紀錄（mirror）同步
   account.js           登入／登出
   setup.js             舊資料轉換、防縮放、動態效果設定
-  notify.js            通知鈴鐺、新版本偵測（讀取線上的 js/config.js）
+  notify.js            通知鈴鐺（顯示 CHANGELOG 第一筆）、新版本偵測（讀取線上的 js/config.js）
   init.js              啟動流程、匯出／還原備份、匯出 CSV
   calc.js              計算核心：計畫分配、撥款、結轉、月底結算、超支墊付
   views/home.js        總覽頁
   views/list.js        明細頁
   views/settings.js    設定頁
   summary.js           月結算畫面與結算風格設定（THEMES）
-  dev.js               開發者選項（連點版本號 7 次開啟）
+  dev.js               開發者選項（連點版本號 7 次開啟）：評等條件、結算風格、更新紀錄
   sheet.js             底部表單開關、下拉收合、emoji 面板
   color.js             罐子顏色面板、依底色決定文字顏色
   entry.js             記一筆／編輯：計算機鍵盤、分類列、存檔
@@ -127,9 +128,10 @@ invites/{email}_{jarId}       共用邀請
 1. 每個版本開一個分支，命名格式為 `<類型>/<issue 編號>-<簡短描述>-v<版本號>`，
    例如 `feature/4-carry-month-share-v30`、`fix/5-startup-error-v31`。
    類型使用 `feature`（新功能）、`fix`（修正）、`refactor`（重構）、`docs`（文件）、`chore`（維護）。
-2. `js/config.js`：
-   - `APP_VERSION` 加一（`sw.js` 會自動使用同一個版本號，不用改）。
-   - `RELEASE` 換成這次的更新內容，用**給使用者看的口吻**撰寫；`t` 為 `new`（新功能）/ `imp`（改善）/ `fix`（修正）。
+2. APP_VERSION 加一，並在 js/changelog.js 的 CHANGELOG 最上方新增一筆：
+   - `APP_VERSION` 在 `js/config.js`（`sw.js` 會自動使用同一個版本號，不用改）。
+   - 新增的一筆為 `{v, date, items}`，`v` 必須等於 `APP_VERSION`（不一致時 Console 會警告，開發者選項的更新紀錄最上方會顯示提醒）。
+   - `items` 用**給使用者看的口吻**撰寫；`t` 為 `new`（新功能）/ `imp`（改善）/ `fix`（修正）。
 3. **新增或刪除 `css/`、`js/` 的檔案時**，同步更新 `index.html` 的載入清單（注意順序）與 `sw.js` 的 `CORE`。
 4. 修改 `firestore.rules` 時，在說明與 commit 內文明確提醒我要貼到 Firebase 主控台。
 5. 更新 `README.md`：版本紀錄表加一行；檔案結構或規則有變時一併更新。

@@ -9,7 +9,7 @@ function verTap(){
   if(left<=0){verTaps=0;try{localStorage.setItem(DEV_KEY,on?'0':'1')}catch(e){}render();toast(on?'已關閉開發者模式':'已開啟開發者模式');return}
   if(left<=3)toast(on?`再點 ${left} 下關閉開發者模式`:`再點 ${left} 下開啟開發者模式`);
 }
-let devView='home';
+let devView='home',clOpen=new Set(); // clOpen: versions expanded on the changelog page (reset when the page is entered)
 const devTop=(back)=>`<div class="sum-top">${back?`<button class="back" data-action="devgo" data-v="${back[0]}">‹ ${back[1]}</button>`:'<span></span>'}<button class="sum-x" data-action="devclose" aria-label="關閉">✕</button></div>`;
 function themePreview(id,big){const tx=themeText(id);return `<div class="${big?'tpbig':'tp'} th-${id}"><div class="tpz">${THEMES[id].badge('S',tx.titles.S)}</div></div>`}
 function devHtml(){
@@ -53,9 +53,19 @@ function devHtml(){
       ${'SABC'.split('').map(grp).join('')}
       <button class="ghost danger" style="margin-top:18px" data-action="tcreset" data-t="${id}">恢復這個風格的預設稱號與評語</button>`;
   }
+  if(devView==='changelog'){
+    const warn=changelogOk()?'':`<div class="clwarn">版本號不一致：APP_VERSION 是 <b>${esc(APP_VERSION)}</b>，但更新紀錄最新一筆是 <b>${esc(CHANGELOG.length?CHANGELOG[0].v:'（空白）')}</b>。改版時請在 js/changelog.js 的 CHANGELOG 最上方新增一筆。</div>`;
+    return `${devTop(['home','開發者選項'])}<h1>更新紀錄</h1>${warn}
+      ${CHANGELOG.map((r,i)=>{const open=clOpen.has(r.v);
+        return `<div class="clv"><button class="clh" data-action="clsec" data-v="${esc(r.v)}" aria-expanded="${open}" aria-controls="cl-${i}">
+          <span class="clt"><b>${esc(r.v)}</b>${r.v===APP_VERSION?'<span class="clcur">目前版本</span>':''}</span>
+          <span class="clr"><span>${esc(r.date)}</span><span class="chev" aria-hidden="true">›</span></span></button>
+          <div class="clb rel" id="cl-${i}"${open?'':' hidden'}>${relList(r.items)}</div></div>`}).join('')}`;
+  }
   return `${devTop(null)}<h1>開發者選項</h1>
     <button class="devitem" data-action="devgo" data-v="rules"><span><span class="t">評等條件</span><span class="s">調整 S、A、B 的判斷門檻，所有風格共用</span></span><span>›</span></button>
     <button class="devitem" data-action="devgo" data-v="themes"><span><span class="t">結算風格</span><span class="s">目前：${THEMES[themeId()].name}・切換風格、調整各風格的稱號與評語</span></span><span>›</span></button>
+    <button class="devitem" data-action="devgo" data-v="changelog"><span><span class="t">更新紀錄</span><span class="s">目前 ${esc(APP_VERSION)}・共 ${CHANGELOG.length} 個版本${changelogOk()?'':'・⚠ 版本號不一致'}</span></span><span>›</span></button>
     <button class="ghost" style="width:100%;margin-top:18px" data-action="devoff">關閉開發者模式</button>
     <p class="note" style="margin-top:10px">也可以在設定頁連點版本號 7 次來關閉。</p>`;
 }
