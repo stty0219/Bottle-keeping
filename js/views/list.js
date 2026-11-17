@@ -1,5 +1,12 @@
 // 明細頁：紀錄列、月初結算、圓餅圖、搜尋
-const rowOf=t=>t.sys?sysRow(t):t.jid?sharedRow(t):txRow(t);
+const rowOf=t=>t.sys?sysRow(t):t.jarSpend?jarSpendRow(t):t.jid?sharedRow(t):txRow(t);
+// my monthly contribution / overspending cover, shown as spending of the jar it comes from: title = shared jar name
+function jarSpendRow(t,noTap){
+  const b=bucketById(t.src),sub=t.kind==='contrib'?'每月撥款':'超支墊付';
+  const inner=`<span class="ic">${t.kind==='contrib'?'🫙':'🩹'}</span><span class="mid"><div class="t1">${esc(jarName(t.jid))}</div>
+    <div class="t2"><span class="dot" style="background:${b?b.color:'#999'}"></span>${esc(b?b.name:'—')}｜${sub}</div></span><span class="amt num">−${money(t.amount)}</span>`;
+  return `<li>${noTap?`<div class="tx">${inner}</div>`:`<button class="tx" data-action="jsx" data-jid="${esc(t.jid)}" data-k="${t.kind}" data-m="${t.date.slice(0,7)}">${inner}</button>`}</li>`;
+}
 // carry-over and month-end settlement, shown on the 1st; display only (never counted in totals)
 function sysItems(month,filter){
   const st=stats(null,month),rows=[],date=month+'-01',prev=shiftMonth(month,-1);
@@ -95,16 +102,15 @@ function txRow(t){
   return `<li class="swipe">${delAct('p:'+t.id)}<button class="tx" data-action="tx" data-id="${t.id}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div><div class="t2">${t2}</div></span><span class="amt num ${cls}">${amt}</span></button></li>`;
 }
 const CAT_COLORS=['#1F7A80','#D29A17','#8A4F7D','#3D6FB6','#5C8A3A','#C25B3A'];
-// slices for the pie: 'all' = spending per jar (my share for shared jars); a jar = spending per category
+// slices for the pie: 'all' = my spending per jar (a shared jar = what I put into it: contribution + cover);
+// a personal jar = spending per category, each shared jar it pays into is one more category; a shared jar = its expenses (display only)
 function pieData(){
-  const m=listMonth,me=myUid();let slices=[],note='',kind;
+  const m=listMonth;let slices=[],note='',kind;
   if(listBucket==='all'){
     kind='jar';
     for(const b of S.buckets){const v=S.txns.filter(t=>t.type==='expense'&&t.bucketId===b.id&&t.date.slice(0,7)===m).reduce((a,t)=>a+t.amount,0);
       if(v)slices.push({key:b.id,name:b.name,color:b.color,value:v})}
-    for(const j of jarsList()){const v=jarShare(j.id,m);if(v)slices.push({key:SJ+j.id,name:j.name+'（你的份額）',color:j.color,value:v})}
-    const toJar=S.buckets.reduce((a,b)=>a+((stats(null,m)[b.id]||{}).monthJar||0),0);
-    if(toJar)note=`另撥到共用罐 ${money(toJar)}，不計入圖表`;
+    for(const p of sharedSpend(m).parts)slices.push({key:p.id,name:jarName(sjId(p.id)),color:colorOf(p.id),value:p.amount,shared:true});
   }else{
     kind='cat';const g={};
     if(isSJ(listBucket)){
@@ -113,9 +119,10 @@ function pieData(){
     }else{
       for(const t of S.txns)if(t.type==='expense'&&t.bucketId===listBucket&&t.date.slice(0,7)===m){
         const c=catById(t.catId),k=t.catId||'?';(g[k]=g[k]||{key:k,name:c?c.name:'已刪除分類',emoji:c?c.emoji:'🧾',value:0,count:0});g[k].value+=t.amount;g[k].count++}
-      const mj=(stats(null,m)[listBucket]||{}).monthJar||0;
-      if(mj)note=`另撥到共用罐 ${money(mj)}，不計入圖表`;
+      for(const p of ((stats(null,m)[listBucket]||{}).jarParts||[]))if(p.amount)
+        g[p.id]={key:p.id,name:jarName(sjId(p.id)),emoji:'🫙',value:p.amount,count:(p.contrib?1:0)+(p.cover?1:0)};
     }
+    if(isSJ(listBucket))note='共用罐的支出僅供參考，不計入你的支出';
     slices=Object.values(g);
   }
   slices.sort((a,b)=>b.value-a.value);
@@ -200,26 +207,26 @@ function listResultsHtml(){
   const terms=searchTerms(),q=terms.length>0,all=q&&listAllMonths;
   let items=monthItems(all?null:listMonth,listBucket);
   if(listBucket==='all')listCat=null;
-  const catOf=t=>t.jid?(t.kind==='expense'?(t.catKey||t.catName||'?'):null):(t.type==='expense'?(t.catId||'?'):null);
+  const catOf=t=>t.jarSpend?SJ+t.jid:t.jid?(t.kind==='expense'?(t.catKey||t.catName||'?'):null):(t.type==='expense'?(t.catId||'?'):null);
   let shown=listCat?items.filter(t=>catOf(t)===listCat):items;
   if(q)shown=shown.filter(t=>noteMatch(t,terms));
   const sys=(!q&&!listCat)?sysItems(listMonth,listBucket):[];
   const covs=(!q&&!listCat)?coverItems(listMonth,listBucket):[];
-  let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,toJar=0,sumCov=0;
+  let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,sumCov=0;const toJar={};
   for(const t of items){
-    if(t.jid){
+    if(t.jarSpend){sumOut+=t.amount;toJar[t.jid]=(toJar[t.jid]||0)+t.amount} // my contribution / cover: spending of its source jar
+    else if(t.jid){ // viewing a shared jar: its records, display only
       if(t.kind==='expense'){shOut+=t.amount;shMine+=myShare(t)}
-      else if(isSJ(listBucket)){if(t.kind==='cover')sumCov+=t.amount;else if(jarIn(t))sumIn+=t.amount}
-      else if(t.kind==='contrib'&&t.by===myUid())toJar+=t.amount;
-      else if(t.kind==='cover'&&t.by===myUid())sumCov+=t.amount;
+      else if(t.kind==='cover')sumCov+=t.amount;else if(jarIn(t))sumIn+=t.amount;
     }
     else{
       if(t.type==='expense')sumOut+=t.amount;
       if(t.type==='income')sumIn+=listBucket==='all'?t.amount:(incAlloc(t)[listBucket]||0);
     }
   }
-  // daily spending: my own expenses, plus my share of shared ones (full amount when viewing a shared jar)
-  const spendOf=t=>t.jid?(t.kind==='expense'?(isSJ(listBucket)?t.amount:myShare(t)):0):(t.type==='expense'?t.amount:0);
+  const jarNote=Object.keys(toJar).map(jid=>`${esc(jarName(jid))} ${money(toJar[jid])}`).join('・');
+  // daily spending: my own expenses + my contributions / covers (a shared jar: its expenses, display only)
+  const spendOf=t=>t.jarSpend?t.amount:t.jid?(t.kind==='expense'?t.amount:0):(t.type==='expense'?t.amount:0);
   const daySpend={};let found=0;
   for(const t of shown){const v=spendOf(t);found+=v;if(v)daySpend[t.date]=(daySpend[t.date]||0)+v}
   for(const t of shown){
@@ -235,7 +242,7 @@ function listResultsHtml(){
     ?`<div class="total"><span>${all?'所有月份':'這個月'}</span><span class="num" style="text-align:right">找到 <b>${shown.length}</b> 筆　支出 <b>${money(found)}</b></span></div>`
     :`<div class="total"><span>這個月</span><span class="num" style="text-align:right">${isSJ(listBucket)
       ?`共用支出 <b>${money(shOut)}</b>（你的份額 ${money(shMine)}）<br>撥入 <b>${money(sumIn)}</b>${sumCov?`・超支墊付 <b>${money(sumCov)}</b>`:''}`
-      :`個人支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${toJar?`<br>撥到共用罐 ${money(toJar)}`:''}${sumCov?`<br>替共用罐墊付 ${money(sumCov)}`:''}${shOut?`<br>共用支出 ${money(shOut)}（你的份額 <b>${money(shMine)}</b>）`:''}`}</span></div>`;
+      :`支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${jarNote?`<br><span class="note">支出含${jarNote}</span>`:''}`}</span></div>`;
   const empty=q?`<div class="empty">${all?'所有月份':'這個月'}沒有符合「${esc(listQuery.trim())}」的紀錄。${all?'':'<br>可以切換到「所有月份」試試看。'}</div>`:'<div class="empty">這個月還沒有紀錄。</div>';
   return `${settleHtml(sys)}${coverHtml(covs)}${totalLine}
     ${q?'':pieHtml()}

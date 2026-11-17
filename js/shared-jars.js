@@ -7,6 +7,7 @@ const myName=()=>(Cloud.user&&(Cloud.user.displayName||(Cloud.user.email||'').sp
 const jarsList=()=>{const pos=shelfPos();return Object.keys(Cloud.jars).map(id=>Object.assign({id},Cloud.jars[id])).sort((a,b)=>(pos[SJ+a.id]??1e9)-(pos[SJ+b.id]??1e9))}; // overview order
 const isMirror=t=>t.kind==='contrib'||t.kind==='cover'||(t.id||'').startsWith('m_');
 function nameOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return (j?j.name:((S.jarPlan||{})[sjId(id)]||{}).name||'共用罐')+'（共用）'}const b=bucketById(id);return b?b.name:'—'}
+function jarName(jid){const j=Cloud.jars[jid];return j?j.name:((S.jarPlan||{})[jid]||{}).name||'共用罐'} // without the （共用） suffix
 function colorOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return j?j.color:'#999'}const b=bucketById(id);return b?b.color:'#999'}
 function memberName(j,uid){const m=(j.memberInfo||{})[uid];return m?(m.name||m.email):'成員'}
 
@@ -30,7 +31,7 @@ function startJars(){
     // keep my contribution plan in step with membership
     let changed=false;S.jarPlan=S.jarPlan||{};
     for(const id in Cloud.jars){const jp=S.jarPlan[id];
-      if(!jp){S.jarPlan[id]={from:curMonth(),hist:[{m:curMonth(),amt:0,src:defaultSrc()}],name:Cloud.jars[id].name};changed=true}
+      if(!jp){S.jarPlan[id]=newJarPlan(Cloud.jars[id].name);changed=true}
       else if(jp.until||jp.name!==Cloud.jars[id].name){if(jp.until&&jp.until<=curMonth())jp.from=curMonth();delete jp.until;jp.name=Cloud.jars[id].name;changed=true}}
     if(!qs.metadata.fromCache){
       for(const id in S.jarPlan){if(!Cloud.jars[id]&&!S.jarPlan[id].until){S.jarPlan[id].until=shiftMonth(curMonth(),1);changed=true}}
@@ -117,7 +118,7 @@ async function createJar(){
   const data={name:'共用罐',color,owner:myUid(),members:[myUid()],memberInfo:{[myUid()]:{name:myName(),email:myEmail()}},
     categories:[{id:uid(),emoji:'🏠',name:'房租'},{id:uid(),emoji:'🛒',name:'家用'},{id:uid(),emoji:'🍽️',name:'聚餐'}],
     createdAt:FV().serverTimestamp(),updatedAt:FV().serverTimestamp()};
-  S.jarPlan=S.jarPlan||{};S.jarPlan[ref.id]={from:curMonth(),hist:[{m:curMonth(),amt:0,src:defaultSrc()}],name:data.name};
+  S.jarPlan=S.jarPlan||{};S.jarPlan[ref.id]=newJarPlan(data.name);
   Cloud.jars[ref.id]=data;persist();render();
   try{await ref.set(data);toast('已建立共用罐，可以改名並邀請對方')}catch(e){toast('建立失敗：'+(e.code||''))}
 }
@@ -196,27 +197,49 @@ function verifyHtml(){
   return `<div class="acct"><div class="note">你的 Email 還沒驗證。為了安全，要先驗證 Email，才能接受別人的共用邀請。</div>
     <div class="btns"><button class="ghost" data-action="verify">寄送驗證信</button><button class="ghost" data-action="verified">我已完成驗證</button></div></div>`;
 }
+// 「罐子」分區的共用罐卡片：只放和錢有關的設定（所屬罐子、每月撥款），成員與邀請在「帳號與共用」
 function sharedHtml(){
   if(!cloudOn())return `<p class="note">登入帳號後，就可以建立共用罐子，和其他人一起投錢、記帳。</p>`;
-  const am=S.allocMode==='amount',me=myUid();
+  const me=myUid();
   const cards=jarsList().map(j=>{
     const owner=j.owner===me,jp=(S.jarPlan||{})[j.id]||{};
+    const e=jarEff(jp,curMonth())||{amt:0,src:defaultSrc()},src=bucketById(e.src)?e.src:defaultSrc(),sname=esc(nameOf(src));
+    const n=(j.members||[]).length;
+    return `<div class="jarcard">
+      <div class="jhead"><button class="swatch" style="background:${j.color}" ${owner?`data-action="colorpick" data-jid="${j.id}"`:'disabled'} aria-label="換顏色"></button>
+        <input type="text" value="${esc(j.name)}" data-edit="jname" data-jid="${j.id}" ${owner?'':'disabled'} aria-label="共用罐名稱">
+        <span class="jtag"><span class="pill">共用</span><span class="jn">${n} 人</span></span></div>
+      <label class="jline"><span>這個共用罐屬於我的</span><select data-edit="jsrc" data-jid="${j.id}" aria-label="這個共用罐屬於我的哪個罐子">${S.buckets.map(b=>`<option value="${b.id}" ${b.id===src?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
+      <label class="jline"><span>每月撥款</span><input type="number" inputmode="numeric" min="0" step="100" value="${+e.amt||0}" data-edit="jamt" data-jid="${j.id}" aria-label="每月撥款"></label>
+      <p class="note jnote">每月從「${sname}」撥進共用罐，單向不退回；共用罐超支時，你的份額也從「${sname}」扣。這兩筆都算「${sname}」的支出。修改從這個月開始生效，過去的月份維持原本的設定。只有你看得到自己的設定。</p>
+      <div class="jdanger">${owner?`<button class="tbtn danger" data-action="deljar" data-jid="${j.id}">刪除共用罐</button>`:`<button class="tbtn danger" data-action="leavejar" data-jid="${j.id}">退出共用</button>`}</div>
+    </div>`}).join('');
+  return `<div class="jarcards">${cards}</div>
+    <button class="ghost" style="margin-top:12px" data-action="newjar">新增共用罐子</button>`;
+}
+// 「帳號與共用」分區：收到的邀請、各共用罐的成員與邀請（每個共用罐一組，可以收合；收合狀態記在這台裝置）
+const MEM_CLOSED_KEY='fenguan-memclosed';
+function memClosed(){try{const v=JSON.parse(localStorage.getItem(MEM_CLOSED_KEY));if(Array.isArray(v))return v}catch(e){}return []} // default: all open
+function toggleMemGroup(k){
+  const closed=new Set(memClosed()),on=closed.has(k);
+  on?closed.delete(k):closed.add(k);
+  try{localStorage.setItem(MEM_CLOSED_KEY,JSON.stringify([...closed]))}catch(e){}
+  const body=document.getElementById('mg-'+k),h=body&&body.previousElementSibling;
+  if(h)h.setAttribute('aria-expanded',on);
+  if(body)body.hidden=!on;
+}
+function membersHtml(){
+  if(!cloudOn())return '';
+  const me=myUid(),closed=new Set(memClosed()),jars=jarsList();
+  const inv=Cloud.invites.length?`<h3 class="sec-sub">收到的邀請</h3>${invitesHtml()}`:'';
+  const groups=jars.map(j=>{
+    const owner=j.owner===me,on=!closed.has(j.id),n=(j.members||[]).length;
     const members=(j.members||[]).map(u=>`<div class="mem"><span>${esc(memberName(j,u))}${u===j.owner?'（擁有者）':''}${u===me?'・你':''}</span>${owner&&u!==me?`<button class="icon-btn" data-action="rmmember" data-jid="${j.id}" data-id="${u}" aria-label="移除成員">✕</button>`:''}</div>`).join('');
     const pend=owner?Cloud.sent.filter(x=>x.jid===j.id).map(x=>`<div class="mem"><span class="note">${esc(x.email)}・等待接受</span><button class="icon-btn" data-action="uninvite" data-id="${esc(x.id)}" aria-label="取消邀請">✕</button></div>`).join(''):'';
-    return `<div class="acct jarcard">
-      <div class="jhead"><button class="swatch" style="background:${j.color}" ${owner?`data-action="colorpick" data-jid="${j.id}"`:'disabled'} aria-label="換顏色"></button>
-        <input type="text" value="${esc(j.name)}" data-edit="jname" data-jid="${j.id}" ${owner?'':'disabled'} aria-label="共用罐名稱"><span class="pill">共用</span></div>
-      ${(()=>{const e=jarEff(jp,curMonth())||{amt:0,src:defaultSrc()};
-        return `<div class="row2" style="margin-top:0"><label class="f">資金來源<select data-edit="jsrc" data-jid="${j.id}">${S.buckets.map(b=>`<option value="${b.id}" ${b.id===e.src?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
-        <label class="f">每月撥款<input type="number" inputmode="numeric" min="0" step="100" value="${+e.amt||0}" data-edit="jamt" data-jid="${j.id}"></label></div>
-        <div class="note" style="margin-top:-4px">每月從「${esc(nameOf(e.src))}」撥進共用罐，單向不退回。修改從這個月開始生效，過去的月份維持原本的金額。只有你看得到自己的設定。</div>
-        <label class="carry cover jcover">共用罐超支時，我的份額從<select data-edit="jcover" data-jid="${j.id}" aria-label="共用罐超支時，我的份額由哪個罐子墊付"><option value="">不墊付</option>${S.buckets.map(b=>`<option value="${b.id}" ${b.id===e.coverBy?'selected':''}>${esc(b.name)}</option>`).join('')}</select>扣</label>
-        <div class="note" style="margin-top:-4px">共用罐這個月新產生的超支，依目前人數平分。不墊付的話，你的份額會讓共用罐維持負數，並標示你尚未墊付。修改從這個月開始生效。</div>`})()}
-      <div class="sub">成員</div>${members}${pend}
-      ${owner?`<div class="invrow"><input type="email" id="inv-${j.id}" placeholder="對方登入用的 Email" inputmode="email"><button class="gbtn" data-action="invite" data-jid="${j.id}">邀請</button></div>`:''}
-      <div class="note">共用分類在「支出分類」分區的「${esc(j.name)}」裡管理。</div>
-      ${owner?`<button class="ghost danger" data-action="deljar" data-jid="${j.id}">刪除共用罐</button>`:`<button class="ghost danger" data-action="leavejar" data-jid="${j.id}">退出共用</button>`}
-    </div>`}).join('');
-  return `${invitesHtml()}<div style="display:grid;gap:12px">${cards}</div>
-    <button class="ghost" style="margin-top:12px" data-action="newjar">新增共用罐子</button>`;
+    return `<div class="cgrp">
+      <button class="cgrp-h" data-action="memgrp" data-k="${j.id}" aria-expanded="${on}" aria-controls="mg-${j.id}">
+        <span class="dot" style="background:${j.color}"></span><span class="cgrp-t">${esc(j.name)}<span class="cgrp-n">・${n} 人</span></span><span class="chev" aria-hidden="true">›</span></button>
+      <div class="cgrp-b" id="mg-${j.id}" ${on?'':'hidden'}>${members}${pend}
+        ${owner?`<div class="invrow"><input type="email" id="inv-${j.id}" placeholder="對方登入用的 Email" inputmode="email"><button class="gbtn" data-action="invite" data-jid="${j.id}">邀請</button></div>`:'<p class="note" style="margin:4px 0 0">只有擁有者可以邀請或移除成員。</p>'}</div></div>`}).join('');
+  return `${inv}<h3 class="sec-sub">共用成員</h3>${jars.length?`<div class="cgrps">${groups}</div>`:'<p class="note" style="margin:0">還沒有共用罐。到「罐子」分區新增共用罐後，可以在這裡邀請成員。</p>'}`;
 }

@@ -118,7 +118,9 @@ function addHtml(){
   const d=draft;const editing=d.editId||d.editShared;
   if(d.expr===undefined)d.expr=d.amount?String(d.amount):'';
   const seg=[['expense','支出'],['income','收入'],['transfer','轉移']].map(([k,l])=>`<button data-action="type" data-t="${k}" aria-pressed="${d.type===k}">${l}</button>`).join('');
-  const jarOpts=sel=>jarsList().map(j=>`<option value="${SJ+j.id}" ${SJ+j.id===sel?'selected':''}>${esc(j.name)}（共用）</option>`).join('');
+  // v36: shared jars can't be chosen any more; an old record that already uses one keeps it as an option while editing
+  const keep=d.keepSJ||[];
+  const jarOpts=sel=>[...new Set(keep)].filter(id=>id===sel).map(id=>`<option value="${id}" selected>${esc(nameOf(id))}</option>`).join('');
   const opts=sel=>S.buckets.map(b=>`<option value="${b.id}" ${b.id===sel?'selected':''}>${esc(b.name)}</option>`).join('')+jarOpts(sel);
   const catBtn=(key,emoji,name,color)=>`<button class="cat" data-action="cat" data-id="${esc(key)}" aria-pressed="${d.catId===key}"><span class="e">${esc(emoji)}</span>${esc(name)}<span class="dot" style="background:${color};margin:2px 0 0"></span></button>`;
   let body='';
@@ -148,7 +150,7 @@ function updateHint(){
     if(c){const id=c.shared?SJ+c.jid:c.bucketId;const after=(c.shared?jarStats(c.jid,mk,exShared).bal:balanceOf(id,mk,d.editId))-amt;
       const b=!c.shared&&bucketById(id),cv=b&&coverOf(b);
       // the jar's own balance before covering / being covered (what it covers for others doesn't trigger its own cover)
-      let own=0;if(cv){const s=stats(d.editId,mk)[id]||{bal:0};own=Math.max(0,s.bal-(s.over||0)+(s.covered||0))}
+      let own=0;if(cv){const s=stats(d.editId,mk)[id]||{bal:0};own=Math.max(0,s.bal-(s.over||0)+(s.covered||0)+(s.jarCover||0))}
       if(cv&&amt>own)
         msg=`「<b>${esc(b.name)}</b>」只剩 ${money(own)}，超出的 <span class="neg">${money(amt-own)}</span> 會由「<b>${esc(cv.name)}</b>」墊付`;
       else msg=`從「<b>${esc(nameOf(id))}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}
@@ -208,7 +210,7 @@ function openTx(id){
   draft={editId:t.id,type:t.type,amount:String(t.amount),date:t.date,note:t.note||'',
     catId:t.type==='expense'&&resolveCat(t.catId)?t.catId:null,
     mode:t.type==='income'?(t.mode||'pct'):'pct',target:(t.type==='income'&&t.target)||b0,
-    from:t.from||b0,to:t.to||b1};
+    from:t.from||b0,to:t.to||b1,keepSJ:[t.from,t.to,t.target].filter(isSJ)};
   openSheet(addHtml());
 }
 function openShared(jid,id){
@@ -219,8 +221,22 @@ function openShared(jid,id){
     draft={editShared:{jid,id,ts:t.ts,split:t.split},type:'expense',amount:String(t.amount),date:t.date,note:t.note||'',catId:resolveCat(t.catKey)?t.catKey:null,mode:'pct'};
     openSheet(addHtml());return;
   }
-  const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'?'這是你每月從自己的罐子撥進共用罐的金額。要調整的話，到設定頁修改這個共用罐的「每月撥款」。'
-    :t.kind==='cover'?'共用罐這個月超支，依人數平分後，這是你的份額，從你設定的罐子墊付，不算支出。要調整的話，到設定頁修改這個共用罐的「共用罐超支時，我的份額從…扣」。':'這筆由你的帳本自動產生。';
+  const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'||t.kind==='cover'?jarSpendWhy(t.kind,t.src||'')
+    :'這筆由你的帳本自動產生。';
   openSheet(`<ul class="txs">${sharedRow(t,true)}</ul><p class="note">${t.date}</p><p class="note">${why}</p>
+    <button class="ghost" style="width:100%;margin-top:10px" data-action="close">關閉</button>`);
+}
+function jarSpendWhy(kind,src){
+  const s=src?`「${esc(src)}」`:'所屬的罐子';
+  return kind==='contrib'?`這是你每月從${s}撥進共用罐的金額，算${s}的支出。要調整的話，到設定頁「罐子」修改這個共用罐的「每月撥款」或所屬罐子。`
+    :`共用罐這個月超支，依人數平分後，這是你的份額，從${s}墊付，算${s}的支出。要調整的話，到設定頁「罐子」修改這個共用罐屬於哪個罐子。`;
+}
+// 個人罐子明細中的「撥款／墊付」支出列
+function openJarSpend(jid,kind,mk){
+  const st=stats(null,mk);let row=null;
+  for(const b of S.buckets)for(const p of ((st[b.id]||{}).jarParts||[]))if(p.id===SJ+jid){
+    const v=kind==='contrib'?p.contrib:p.cover;if(v)row={jarSpend:true,id:'js_'+kind+'_'+jid+'_'+b.id,date:mk+'-01',jid,kind,amount:v,src:b.id}}
+  if(!row)return;
+  openSheet(`<ul class="txs">${jarSpendRow(row,true)}</ul><p class="note">${row.date}</p><p class="note">${jarSpendWhy(kind,nameOf(row.src))}</p>
     <button class="ghost" style="width:100%;margin-top:10px" data-action="close">關閉</button>`);
 }

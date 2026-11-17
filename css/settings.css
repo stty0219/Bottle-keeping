@@ -6,13 +6,29 @@
 .carry input{width:18px;height:18px;accent-color:var(--ink)}
 .carry.cover{margin-top:0}
 .carry.cover select{width:auto;flex:0 1 auto;padding:5px 10px}
-.jhead{display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center}
-.jarcard .carry{grid-column:auto;margin:0;flex-wrap:wrap}
-.jarcard .sub{font-size:13px;font-weight:700;margin-top:4px}
-.mem{display:flex;justify-content:space-between;align-items:center;font-size:14px;min-height:32px}
-.invrow{display:grid;grid-template-columns:1fr auto;gap:8px}
+/* 共用罐卡片（罐子分區）：和個人罐子一樣用細線分隔，不加外框 */
+.jarcards{display:grid}
+.jarcard{display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}
+.jarcards>.jarcard:first-child{padding-top:4px}
+.jhead{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:8px;align-items:center}
+.jtag{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.jtag .pill{margin:0}
+.jn{font-size:13px;color:var(--muted)}
+.jline{display:grid;grid-template-columns:1fr 132px;gap:8px;align-items:center;font-size:14px;padding-left:42px}
+.jline select,.jline input{width:100%}
+.jnote{margin:0;padding-left:42px}
+.jdanger{display:flex;justify-content:flex-end;margin-top:4px;padding-top:8px;border-top:1px dashed var(--line)}
+.tbtn{background:none;border:0;padding:8px 4px;font-size:14px;font-weight:600;min-height:40px}
+.tbtn.danger{color:var(--neg)}
+/* 共用成員（帳號與共用分區） */
+#sec-account .acct+.acct{margin-top:12px}
+#sec-account .sec-sub{margin-top:18px}
+.mem{display:flex;justify-content:space-between;align-items:center;font-size:14px;min-height:36px}
+.invrow{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:6px}
 .set-item.jc{grid-template-columns:52px 1fr 36px;border-bottom:1px solid var(--line)}
 .invite{border-color:var(--ink);margin-bottom:12px}
+#sec-account .invite{margin-bottom:0}
+#sec-account .invite+.invite{margin-top:8px}
 .catgroup{font-size:12px;color:var(--muted);margin:14px 0 -6px}
 .plan-extra{display:grid;gap:8px;margin-top:10px}
 .set-item.cat-item{grid-template-columns:52px 1fr 1fr 36px}

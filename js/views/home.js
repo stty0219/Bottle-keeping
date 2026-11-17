@@ -15,7 +15,9 @@ function monthNav(){
     <button class="arr" data-action="mshift" data-d="1" aria-label="下個月" ${listMonth>=latest?'disabled':''}>›</button></div>`;
 }
 // this month's share of a carrying jar / shared jar: what it got, what it used (incl. covering), what is left of it
-function monthShare(s){const used=s.monthOut+(s.covered||0);return {in:s.monthIn,used,left:s.bal-s.open}}
+function monthShare(s){const used=s.monthOut+(s.jarOut||0)+(s.covered||0);return {in:s.monthIn,used,left:s.bal-s.open}}
+// 「含美樂蒂 $1,500」：撥給共用罐的錢（每月撥款＋超支墊付），算這個罐子的支出
+function jarPartsText(s){return (s.jarParts||[]).filter(p=>p.amount).map(p=>`${esc(jarName(sjId(p.id)))} ${money(p.amount)}`).join('・')}
 // carrying jars show this month's share (water level = left ÷ got); reset jars keep the old level
 function jarCol(id,name,color,s,sub,shared,bad,carry){
   let base,ratio;
@@ -42,18 +44,13 @@ const overLine=s=>s.over?`<br><span class="neg">超支 ${money(s.over)} 由${cov
 function leftSub(left){return left<0?`本月超用 ${money(-left)}`:`本月剩 ${money(left)}`}
 // my share of a shared expense: split by the member count when it was recorded
 function myShare(t){const n=t.split||((Cloud.jars[t.jid]||{}).members||[]).length||1;return Math.round(t.amount/n)}
-function sharedMonth(month){ // shared expenses this month: total and my share
-  let total=0,share=0;
-  for(const j of jarsList())for(const t of (Cloud.jarTxns[j.id]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===month){total+=t.amount;share+=myShare(t)}
-  return {total,share};
-}
 function monthRow(name,color,s,shared,jid,carry){
   if(shared||carry){ // this month's share: got / used / left, then the running total
     const m=monthShare(s);
     let first;
     if(shared){const mc=s.monthCover||0;
       first=`本月撥入 ${money(m.in-mc)}${mc?`・超支墊付 ${money(mc)}`:''}・共用支出 ${money(s.monthOut)}（你的份額 ${money(jarShare(jid,listMonth))}）${jarOverLine(jid,listMonth)}`}
-    else{const parts=[];if(s.covered)parts.push(`替${coverNames(s)}墊付 ${money(s.covered)}`);if(s.monthJar)parts.push(`撥共用 ${money(s.monthJar)}`);
+    else{const parts=[],jt=jarPartsText(s);if(jt)parts.push(jt);if(s.covered)parts.push(`替${coverNames(s)}墊付 ${money(s.covered)}`);
       first=`本月分到 ${money(m.in)}・用掉 ${money(m.used)}${parts.length?`（含${parts.join('・')}）`:''}${overLine(s)}`}
     const left=m.left<0?`<span class="neg">${leftSub(m.left)}</span>`:leftSub(m.left);
     const w=m.in>0?Math.min(100,m.used/m.in*100):(m.used>0?100:0);
@@ -61,35 +58,36 @@ function monthRow(name,color,s,shared,jid,carry){
   <div class="bar" style="display:flex"><i style="width:${w}%;background:${m.used>m.in?'var(--neg)':color}"></i></div></div>`;
   }
   const avail=Math.max(0,s.open)+s.monthIn;
-  const cov=s.covered||0,spent=s.monthOut-(s.monthJar||0),used=s.monthOut+cov,base=Math.max(avail,used,1); // covering others uses this jar's money too
-  const lab=`花了 ${money(spent)}${s.monthJar?`・撥共用 ${money(s.monthJar)}`:''} ／ 可用 ${money(avail)}${overLine(s)}${cov?`<br><span class="note">替${coverNames(s)}墊付 ${money(cov)}</span>`:''}`;
-  const jarW=s.monthJar?Math.min(100,s.monthJar/base*100):0,spW=Math.min(100-jarW,Math.max(0,spent+cov)/base*100);
+  // spent includes the money put into shared jars; covering another personal jar uses this jar's money too
+  const cov=s.covered||0,spent=s.monthOut+(s.jarOut||0),used=spent+cov,base=Math.max(avail,used,1),jt=jarPartsText(s);
+  const lab=`花了 ${money(spent)}${jt?`（含${jt}）`:''} ／ 可用 ${money(avail)}${overLine(s)}${cov?`<br><span class="note">替${coverNames(s)}墊付 ${money(cov)}</span>`:''}`;
+  const spW=Math.min(100,Math.max(0,used)/base*100);
   return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">${lab}</span></div>
-  <div class="bar" style="display:flex">${jarW?`<i style="width:${jarW}%;background:${color};opacity:.45;border-radius:4px 0 0 4px"></i>`:''}<i style="width:${spW}%;background:${used>avail?'var(--neg)':color};${jarW?'border-radius:0 4px 4px 0':''}"></i></div></div>`;
+  <div class="bar" style="display:flex"><i style="width:${spW}%;background:${used>avail?'var(--neg)':color}"></i></div></div>`;
 }
 function jarShare(jid,month){let s=0;for(const t of (Cloud.jarTxns[jid]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===month)s+=myShare(t);return s}
-// records for a month: my own records + shared-jar records.
-// My mirrored transfers already appear as my own transfers; my monthly contribution and overspending cover show under their source jar.
+// my monthly contribution and overspending cover, as spending rows of the jar they come from (same numbers as stats())
+function jarSpendItems(month,filter){
+  if(month===null)return []; // searching all months only matches notes; these rows have none
+  const st=stats(null,month),rows=[];
+  for(const b of S.buckets){if(filter!=='all'&&filter!==b.id)continue;
+    for(const p of ((st[b.id]||{}).jarParts||[])){const jid=sjId(p.id);
+      for(const kind of ['contrib','cover']){const v=p[kind];
+        if(v)rows.push({jarSpend:true,id:'js_'+kind+'_'+jid+'_'+b.id,date:month+'-01',ts:0,jid,kind,amount:v,src:b.id})}}}
+  return rows;
+}
+// records for a month.
+// 全部 / a personal jar: my own records + my contributions and covers as spending of their source jar.
+// A shared jar: all of its records (display only; its expenses are not my spending).
 function monthItems(month,filter){
-  const me=myUid();filter=filter||'all';
-  let own=[],sh=[];
-  if(!isSJ(filter)){
-    const rel=t=>filter==='all'||(t.type==='expense'&&t.bucketId===filter)||(t.type==='income'&&incAlloc(t)[filter])||(t.type==='transfer'&&(t.from===filter||t.to===filter));
-    own=S.txns.filter(t=>(month===null||t.date.slice(0,7)===month)&&rel(t));
+  filter=filter||'all';
+  if(isSJ(filter)){
+    const jid=sjId(filter);if(!Cloud.jars[jid])return [];
+    return (Cloud.jarTxns[jid]||[]).filter(t=>month===null||t.date.slice(0,7)===month).sort(sortTx);
   }
-  for(const j of jarsList()){
-    if(isSJ(filter)&&sjId(filter)!==j.id)continue;
-    for(const t of (Cloud.jarTxns[j.id]||[])){
-      if(month!==null&&t.date.slice(0,7)!==month)continue;
-      if(!isSJ(filter)){
-        const mineContrib=t.by===me&&(t.kind==='contrib'||t.kind==='cover');
-        if(filter!=='all'){if(!(mineContrib&&t.srcId===filter))continue}
-        else if(t.by===me&&isMirror(t)&&!mineContrib)continue;
-      }
-      sh.push(t);
-    }
-  }
-  return own.concat(sh).sort(sortTx);
+  const rel=t=>filter==='all'||(t.type==='expense'&&t.bucketId===filter)||(t.type==='income'&&incAlloc(t)[filter])||(t.type==='transfer'&&(t.from===filter||t.to===filter));
+  const own=S.txns.filter(t=>(month===null||t.date.slice(0,7)===month)&&rel(t));
+  return own.concat(jarSpendItems(month,filter)).sort(sortTx);
 }
 function homeView(){
   const st=stats(null,listMonth);
@@ -103,7 +101,8 @@ function homeView(){
   const sjars='';
   const total=S.buckets.reduce((a,b)=>a+st[b.id].bal,0);
   const monthRows=order.map(id=>{if(isSJ(id)){const j=Cloud.jars[sjId(id)];return monthRow(j.name,j.color,jarStats(sjId(id),listMonth),true,sjId(id))}const b=bucketById(id);return monthRow(b.name,b.color,st[b.id],false,null,carries(b))}).join('');
-  const own=S.txns.filter(t=>t.type==='expense'&&t.date.slice(0,7)===listMonth).reduce((a,t)=>a+t.amount,0),sm=sharedMonth(listMonth);
+  const own=ownSpend(listMonth),sm=sharedSpend(listMonth,st);
+  const spendNote=sm.parts.length?`<br><span class="note">個人 ${money(own)}${sm.parts.map(p=>`＋${esc(jarName(sjId(p.id)))} ${money(p.amount)}`).join('')}</span>`:'';
   const items=monthItems(listMonth,'all');
   const isNow=listMonth===curMonth();
   const any=S.txns.length||shared.length;
@@ -111,7 +110,7 @@ function homeView(){
   return `${cloudOn()?invitesHtml():''}${monthNav()}${listMonth<curMonth()?`<button class="sumbtn" data-action="summary">📊 查看 ${+listMonth.slice(5)} 月結算</button>`:''}<div class="shelf">${jars}${sjars}</div>
   <div class="total"><span>${isNow?'目前':'月底'}${shared.length?'我的罐子':'所有罐子'}合計</span><b class="num ${total<0?'neg':''}">${money(total)}</b></div>
   ${empty}
-  ${any?`<div class="total" style="margin-top:0;border-top:0"><span>這個月支出</span><span class="num"><b>${money(own+sm.share)}</b>${shared.length?`<br><span class="note">個人 ${money(own)}＋共用份額 ${money(sm.share)}</span>`:''}</span></div>
+  ${any?`<div class="total" style="margin-top:0;border-top:0"><span>這個月支出</span><span class="num"><b>${money(own+sm.total)}</b>${spendNote}</span></div>
   <h2>這個月各罐</h2><div class="month-row">${monthRows}</div>
   <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(rowOf).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
 }

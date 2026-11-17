@@ -8,7 +8,9 @@ const sjId=id=>id.slice(SJ.length);
 const jarActive=(jp,mk)=>!!jp&&(!jp.from||mk>=jp.from)&&(!jp.until||mk<jp.until);
 function targets(mk){return S.buckets.map(b=>({id:b.id,pct:+b.pct||0,amt:+b.amt||0}))}
 // my contribution plan for a shared jar: hist = [{m:'YYYY-MM', amt, src, coverBy}] — each entry applies from its month on
-// coverBy: my personal jar that covers my share when the shared jar overspends (null = don't cover)
+// src: the personal jar this shared jar belongs to (所屬罐子); the monthly contribution comes from it.
+// coverBy: the jar that covers my share when the shared jar overspends. v36+: always the same as src
+// (entries before v36 may differ or be null; they keep applying to their own past months)
 function defaultSrc(){const b=S.buckets.find(b=>/日常/.test(b.name))||S.buckets.find(b=>!isPinned(b))||S.buckets[0];return b?b.id:null}
 function jarEff(jp,mk){if(!jp||!jp.hist)return null;let e=null;for(const x of jp.hist)if(x.m<=mk)e=x;return e}
 function jarContrib(jp,mk){ // {amt,src} moved in month mk (up to the furthest month in view)
@@ -23,9 +25,33 @@ function jarCoverSrc(jp,mk){ // my jar that covers my share of month mk's oversp
 function setJarPlan(jid,field,val){ // changes take effect from the current month; past months keep their amount
   const jp=(S.jarPlan||{})[jid];if(!jp)return;
   jp.hist=jp.hist||[];const m=curMonth(),last=jp.hist[jp.hist.length-1];
-  const base=jarEff(jp,m)||{amt:0,src:defaultSrc(),coverBy:null};
-  if(last&&last.m===m)last[field]=val;
-  else jp.hist.push(Object.assign({m:(jp.from&&jp.from>m)?jp.from:m,amt:base.amt,src:base.src,coverBy:base.coverBy||null},{[field]:val}));
+  const base=jarEff(jp,m)||last||{amt:0,src:defaultSrc()},at=(jp.from&&jp.from>m)?jp.from:m;
+  // the owner jar pays both the monthly contribution and my share of overspending
+  const up=field==='src'?{src:val,coverBy:val}:{[field]:val};
+  if(last&&last.m===at)Object.assign(last,up);
+  else jp.hist.push(Object.assign({m:at,amt:base.amt,src:base.src,coverBy:base.src},up));
+}
+function newJarPlan(name){const src=defaultSrc();return {from:curMonth(),hist:[{m:curMonth(),amt:0,src,coverBy:src}],name}}
+/* v36: a shared jar belongs to one personal jar (src), which also covers my share of its overspending.
+   Once per ledger: from the current month on, coverBy = src. Past months keep what they had, so past balances don't change.
+   What changed is kept in jarOwnerNote and shown in the notification panel. */
+function migrateJarOwner(){
+  if(S.jarOwnerV36||!S.buckets||!S.buckets.length)return false;
+  const m=curMonth(),items=[];
+  for(const jid in (S.jarPlan||{})){
+    const jp=S.jarPlan[jid];if(!jp.hist||!jp.hist.length||(jp.until&&jp.until<=m))continue;
+    const e=jarEff(jp,m)||jp.hist[0],own=bucketById(e.src);if(!own)continue;
+    const before=e.coverBy||null;
+    if(before!==e.src){if(e.m>=m)e.coverBy=e.src;else jp.hist.splice(jp.hist.indexOf(e)+1,0,{m,amt:e.amt,src:e.src,coverBy:e.src})}
+    for(const x of jp.hist)if(x.m>m)x.coverBy=x.src;
+    if(before!==e.src){
+      const nm=(Cloud.jars[jid]||{}).name||jp.name||'共用罐',was=bucketById(before);
+      items.push(`「${nm}」超支時你的份額，從這個月起改由「${own.name}」支付（原本${was?`是「${was.name}」`:'不墊付'}）。`);
+    }
+  }
+  S.jarOwnerV36=true;
+  if(items.length)S.jarOwnerNote={at:Date.now(),items};
+  return true;
 }
 function migrateJarPlan(){
   let changed=false;
@@ -109,14 +135,17 @@ function stats(excludeId,month){
   }
   const pt=planTotals(excludeId);
   for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk],mk);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
+  // money I put into shared jars, per month: {src, id:'sj:<jarId>', contrib, cover} — shown as the source jar's spending
+  const jx={},jpart=(mk,src,jid)=>{const l=jx[mk]||(jx[mk]=[]);let p=l.find(x=>x.src===src&&x.id===SJ+jid);if(!p)l.push(p={src,id:SJ+jid,contrib:0,cover:0});return p};
   for(const jid in (S.jarPlan||{})){const jp=S.jarPlan[jid];
-    for(let mk=jp.from||month;mk<=month;mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);if(c){add(c.src,mk,'o',c.amt);add(c.src,mk,'j',c.amt)}}}
+    for(let mk=jp.from||month;mk<=month;mk=shiftMonth(mk,1)){const c=jarContrib(jp,mk);if(c){add(c.src,mk,'o',c.amt);add(c.src,mk,'j',c.amt);jpart(mk,c.src,jid).contrib+=c.amt}}}
   // my share of shared-jar overspending: read from the cover records I wrote into the shared jars
   const me=myUid(),jc={};
   if(me)for(const jid in Cloud.jarTxns)for(const t of Cloud.jarTxns[jid]){
     if(t.kind!=='cover'||t.by!==me||t.id===excludeId||!per[t.srcId])continue;
     const mk=t.date.slice(0,7);if(mk>month)continue;
     (jc[mk]||(jc[mk]=[])).push({src:t.srcId,id:SJ+jid,amount:t.amount});
+    jpart(mk,t.srcId,jid).cover+=t.amount;
   }
   // walk month by month:
   // 1. balance = carried in + this month's in − out
@@ -134,10 +163,13 @@ function stats(excludeId,month){
     for(const b of S.buckets)short[b.id]=bal[b.id]<0?-bal[b.id]:0;
     for(const b of S.buckets){const c=coverOf(b);
       if(c&&short[b.id]>0){bal[b.id]+=short[b.id];bal[c.id]-=short[b.id];covBy[b.id]=c.id;(cov[c.id]||(cov[c.id]=[])).push({id:b.id,amount:short[b.id]})}}
-    for(const x of (jc[mk]||[])){bal[x.src]-=x.amount;(cov[x.src]||(cov[x.src]=[])).push({id:x.id,amount:x.amount})}
+    for(const x of (jc[mk]||[]))bal[x.src]-=x.amount;
     if(isTarget){
       for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0},parts=cov[b.id]||[];
-        out[b.id]={open:open[b.id],monthIn:cur.i,monthOut:cur.o,monthJar:cur.j,bal:bal[b.id],sweep:0,short:short[b.id],
+        const jp=(jx[mk]||[]).filter(p=>p.src===b.id).map(p=>({id:p.id,contrib:p.contrib,cover:p.cover,amount:p.contrib+p.cover}));
+        const jcov=jp.reduce((a,p)=>a+p.cover,0);
+        // monthOut = own spending + transfers out (no shared-jar money); jarOut = contribution + cover paid into shared jars
+        out[b.id]={open:open[b.id],monthIn:cur.i,monthOut:cur.o-cur.j,monthJar:cur.j,jarCover:jcov,jarOut:cur.j+jcov,jarParts:jp,bal:bal[b.id],sweep:0,short:short[b.id],
           over:covBy[b.id]?short[b.id]:0,coveredBy:covBy[b.id]||null,covered:parts.reduce((a,p)=>a+p.amount,0),coverParts:parts}}
       break;
     }
@@ -170,5 +202,15 @@ function jarOver(jid,mk){
   for(const t of (Cloud.jarTxns[jid]||[]))if(t.kind==='cover'&&t.date.slice(0,7)===mk)paid[t.by]=(paid[t.by]||0)+t.amount;
   const unpaid=over?mem.map(u=>({uid:u,amount:Math.max(0,share-(paid[u]||0))})).filter(x=>x.amount>0):[];
   return {over,n,share,paid,unpaid,covered:s.monthCover};
+}
+// v36: my spending = own expenses + money I put into shared jars (monthly contribution + overspending cover).
+// Shared expenses inside a shared jar are not my spending (they are paid with that money).
+function ownSpend(month){return S.txns.filter(t=>t.type==='expense'&&t.date.slice(0,7)===month).reduce((a,t)=>a+t.amount,0)}
+function sharedSpend(month,st){ // {total, parts:[{id:'sj:<jarId>', contrib, cover, amount}]} in overview order
+  st=st||stats(null,month);const by={};let total=0;
+  for(const b of S.buckets)for(const p of ((st[b.id]||{}).jarParts||[])){
+    const g=by[p.id]||(by[p.id]={id:p.id,contrib:0,cover:0,amount:0});g.contrib+=p.contrib;g.cover+=p.cover;g.amount+=p.amount;total+=p.amount}
+  const pos=shelfPos();
+  return {total,parts:Object.values(by).filter(p=>p.amount).sort((a,b)=>(pos[a.id]??1e9)-(pos[b.id]??1e9))};
 }
 function balanceOf(id,month,excludeId){return isSJ(id)?jarStats(sjId(id),month,excludeId).bal:(stats(excludeId,month)[id]||{bal:0}).bal}

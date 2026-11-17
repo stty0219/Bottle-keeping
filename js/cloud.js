@@ -81,8 +81,8 @@ function subscribe(ref){
     if(!snap.exists){fail({code:'permission-denied'});return}
     if(snap.metadata.hasPendingWrites)return;
     const d=snap.data();
-    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.excessTo=d.excessTo||null;S.sweepTo=d.sweepTo||null;S.jarPlan=d.jarPlan||{};S.gradeRules=d.gradeRules||null;S.gradeComments=d.gradeComments||null;S.sumTheme=d.sumTheme||null;S.shelfOrder=d.shelfOrder||null;S.themeText=d.themeText||null;S.ledgerName=d.name||'我的帳本';S.myColors=d.myColors;
-    const mig=migrateAlloc()|migrateCover()|migrateJarPlan()|migrateTheme()|migrateColors()|migrateSharedCats();saveLocal();safeRender();if(mig)persist();
+    S.buckets=d.buckets||[];S.categories=d.categories||[];S.allocMode=d.allocMode||'pct';S.remainderId=d.remainderId||null;S.excessTo=d.excessTo||null;S.sweepTo=d.sweepTo||null;S.jarPlan=d.jarPlan||{};S.gradeRules=d.gradeRules||null;S.gradeComments=d.gradeComments||null;S.sumTheme=d.sumTheme||null;S.shelfOrder=d.shelfOrder||null;S.themeText=d.themeText||null;S.ledgerName=d.name||'我的帳本';S.myColors=d.myColors;S.jarOwnerV36=!!d.jarOwnerV36;S.jarOwnerNote=d.jarOwnerNote||null;
+    const mig=migrateAlloc()|migrateCover()|migrateJarPlan()|migrateJarOwner()|migrateTheme()|migrateColors()|migrateSharedCats();saveLocal();safeRender();updateBell();if(mig)persist();
     if(!Cloud.ledgerLoaded){Cloud.ledgerLoaded=true;startJars()}
     scheduleMirror();
   },fail));
@@ -109,7 +109,7 @@ function persist(){ // buckets & categories
   if(!cloudOn())return;
   clearTimeout(Cloud.metaTimer);
   Cloud.metaTimer=setTimeout(()=>{
-    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'amount',excessTo:S.excessTo||null,sweepTo:S.sweepTo||null,remainderId:S.sweepTo||null,jarPlan:clean(S.jarPlan||{}),shelfOrder:S.shelfOrder||null,gradeRules:S.gradeRules?clean(S.gradeRules):null,sumTheme:S.sumTheme||null,themeText:S.themeText?clean(S.themeText):null,myColors:clean(myColors()),gradeComments:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    Cloud.ref.update({buckets:clean(S.buckets),categories:clean(S.categories),allocMode:S.allocMode||'amount',excessTo:S.excessTo||null,sweepTo:S.sweepTo||null,remainderId:S.sweepTo||null,jarPlan:clean(S.jarPlan||{}),shelfOrder:S.shelfOrder||null,gradeRules:S.gradeRules?clean(S.gradeRules):null,sumTheme:S.sumTheme||null,themeText:S.themeText?clean(S.themeText):null,myColors:clean(myColors()),jarOwnerV36:!!S.jarOwnerV36,jarOwnerNote:S.jarOwnerNote?clean(S.jarOwnerNote):null,gradeComments:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
       .catch(e=>{Cloud.err='設定沒有存到雲端：'+(e.message||e.code);renderIfSettings()});
     syncStatus();scheduleMirror();
   },600);
@@ -125,7 +125,7 @@ function removeTxn(id){
 }
 async function replaceAll(data){ // import / reset
   const keep={ledgerId:S.ledgerId,ledgerOwner:S.ledgerOwner,ledgerName:S.ledgerName};
-  S=Object.assign(data,keep);migrate();migrateAlloc();migrateCover();migrateColors();saveLocal();render();
+  S=Object.assign(data,keep);migrate();migrateAlloc();migrateCover();migrateJarPlan();migrateJarOwner();migrateColors();saveLocal();render();
   if(cloudOn()){
     setSync('同步中…');
     try{await deleteAllTxns(Cloud.ref);await writeTxns(Cloud.ref,S.txns);persist()}
