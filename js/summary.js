@@ -101,16 +101,17 @@ function migrateTheme(){ // v22 kept one set of comments: it becomes the classic
 
 function daysIn(mk){const [y,m]=mk.split('-').map(Number);return new Date(y,m,0).getDate()}
 function monthData(mk){
-  const me=myUid();
   const inc=S.txns.filter(t=>t.type==='income'&&t.date.slice(0,7)===mk).reduce((a,t)=>a+t.amount,0);
   const exps=[];
   for(const t of S.txns)if(t.type==='expense'&&t.date.slice(0,7)===mk){const c=catById(t.catId);exps.push({key:t.catId||'?',name:c?c.name:'已刪除分類',emoji:c?c.emoji:'🧾',amount:t.amount,full:t.amount,date:t.date,note:t.note||'',shared:false,mine:true})}
-  for(const j of jarsList())for(const t of (Cloud.jarTxns[j.id]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===mk)
-    exps.push({key:'s:'+(t.catKey||t.catName||'?'),name:t.catName||'共用支出',emoji:t.emoji||'🧾',amount:myShare(t),full:t.amount,date:t.date,note:t.note||'',shared:true,jar:j.name,mine:t.by===me,by:t.by===me?'你':(t.byName||'成員')});
-  const spend=exps.reduce((a,e)=>a+e.amount,0);
-  const cats={};for(const e of exps){const g=cats[e.key]||(cats[e.key]={key:e.key,name:e.name,emoji:e.emoji,shared:e.shared,value:0,count:0,n:0});g.value+=e.amount;g.n++;if(e.mine)g.count++}
+  // v36: money I put into a shared jar (contribution + cover) is my spending, one category per shared jar;
+  // the shared jar's own expenses are not counted again
   const st=stats(null,mk);
-  const jars=S.buckets.map(b=>{const s=st[b.id]||{open:0,monthIn:0,monthOut:0,bal:0};return {name:b.name,color:b.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut,bal:s.bal,short:s.short||0,over:s.over||0,coveredBy:s.coveredBy||null,covered:s.covered||0}});
+  for(const b of S.buckets)for(const p of ((st[b.id]||{}).jarParts||[]))for(const kind of ['contrib','cover'])if(p[kind])
+    exps.push({key:p.id,name:jarName(sjId(p.id)),emoji:'🫙',amount:p[kind],full:p[kind],date:mk+'-01',note:(kind==='contrib'?'每月撥款':'超支墊付')+'・從'+b.name,shared:false,jar:true,mine:true});
+  const spend=exps.reduce((a,e)=>a+e.amount,0);
+  const cats={};for(const e of exps){const g=cats[e.key]||(cats[e.key]={key:e.key,name:e.name,emoji:e.emoji,jar:!!e.jar,value:0,count:0,n:0});g.value+=e.amount;g.n++;if(e.mine)g.count++}
+  const jars=S.buckets.map(b=>{const s=st[b.id]||{open:0,monthIn:0,monthOut:0,bal:0};return {name:b.name,color:b.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut+(s.jarOut||0),bal:s.bal,short:s.short||0,over:s.over||0,coveredBy:s.coveredBy||null,covered:s.covered||0}});
   const sjars=jarsList().map(j=>{const s=jarStats(j.id,mk);return {name:j.name,color:j.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut,bal:s.bal,shared:true}});
   return {mk,inc,spend,net:inc-spend,exps,cats:Object.values(cats).sort((a,b)=>b.value-a.value),jars,sjars,
     over:jars.filter(j=>j.short>0).length, // the jar's own overspending counts, covered or not; going negative by covering others doesn't
@@ -176,12 +177,12 @@ function summaryHtml(mk,tid){
     <div class="cards2">${card(L.inc,countSpan(d.inc),p.has?delta(d.inc,p.inc,'inc',L):'')}${card(L.spend,countSpan(d.spend,'bad'),p.has?delta(d.spend,p.spend,'spend',L):'')}</div>`;
   else html+=`<div class="cards3">${card(L.inc,countSpan(d.inc),p.has?delta(d.inc,p.inc,'inc',L):'')}${card(L.spend,countSpan(d.spend),p.has?delta(d.spend,p.spend,'spend',L):'')}${card(L.net,countSpan(d.net,d.net<0?'bad':''),p.has?delta(d.net,p.net,'save',L):'')}</div>`;
   html+=`${p.has?'':`<p class="note" style="margin:8px 0 0">${L.noPrev}</p>`}
-    ${d.sjars.length?'<p class="note" style="margin:8px 0 0">支出含共用支出中你的份額；撥到共用罐的錢不算支出。</p>':''}</section>`;
+    ${d.cats.some(c=>c.jar)?'<p class="note" style="margin:8px 0 0">支出含撥給共用罐的錢（每月撥款與超支墊付）；共用罐裡的支出不另外計算。</p>':''}</section>`;
   // category ranking (tap to expand)
   const top=d.cats.length?d.cats[0].value:1;
   html+=`<section class="${A()}"><h3>${L.rank}</h3>${d.cats.length?d.cats.map((c,k)=>{const open=sumState.open.has(c.key);
     return `<div class="rank ${open?'open':''}"><button class="rankh" data-action="catx" data-k="${esc(c.key)}" aria-expanded="${open}"><span class="no">${L.rankNo(k)}</span>
-      <span class="nm">${esc(c.emoji)} ${esc(c.name)}${c.shared?'<small>共用份額</small>':''}</span>
+      <span class="nm">${esc(c.emoji)} ${esc(c.name)}${c.jar?'<small>共用罐</small>':''}</span>
       <span class="am num">${money(c.value)}<small>${pct(c.value,d.spend)}%・${c.n} 筆</small></span><span class="cv">›</span>
       <div class="bar"><i style="width:${(c.value/top*100).toFixed(1)}%;background:${CAT_COLORS[k%CAT_COLORS.length]}"></i></div></button>
       ${open?catDetail(d,c.key):''}</div>`}).join(''):'<div class="empty" style="padding:12px 0">這個月沒有支出。</div>'}</section>`;

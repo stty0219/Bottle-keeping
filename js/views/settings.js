@@ -86,15 +86,14 @@ function settingsView(){
   // summaries and alerts (alerts show even when the section is collapsed)
   const u=Cloud.user;
   const acctSum=!cloudConfigured()?'雲端未設定':u?(u.email||u.displayName||'已登入'):'尚未登入';
-  const acctBadge=u&&!u.emailVerified?'Email 未驗證':'';
+  const ni=(Cloud.invites||[]).length;
+  const acctBadge=u&&!u.emailVerified?'Email 未驗證':ni?`${ni} 個邀請`:'';
   const nj=jarsList().length;
   const jarsSum=`${S.buckets.length} 個罐子${nj?`、${nj} 個共用罐`:''}`;
-  const ni=(Cloud.invites||[]).length;
-  const jarsBadge=ni?`${ni} 個邀請`:'';
   const motionLabel={standard:'標準',reduce:'減少',off:'關閉'};
 
-  return sec('account','帳號與同步',acctSum,acctBadge,`${accountHtml()}${verifyHtml()}`)
-  +sec('jars','罐子',jarsSum,jarsBadge,`<h3 class="sec-sub">個人罐子</h3>
+  return sec('account','帳號與共用',acctSum,acctBadge,`${accountHtml()}${verifyHtml()}${membersHtml()}`)
+  +sec('jars','罐子',jarsSum,'',`<h3 class="sec-sub">個人罐子</h3>
   <p class="note">設定每個罐子每月要放多少錢。同一個月的收入會加總後依計畫分配；修改金額會重新計算所有月份。「全部放入一罐」的收入不受影響。按住左側的 ≡ 可以拖拉調整順序。</p>
   <div id="bucketList">${bl}</div>
   <div class="pctsum" id="plansum">每月計畫合計 <b class="num">${money(planSum())}</b></div>

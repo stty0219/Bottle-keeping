@@ -32,7 +32,7 @@ header.top h1{font-size:22px;margin:0;font-weight:700}
 .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .chip{border:1.5px solid transparent;background:var(--chip);border-radius:999px;padding:6px 13px;font-size:14px}
 .chip[aria-pressed="true"]{border-color:var(--ink);background:var(--surface);font-weight:600}
-input[type=month],input[type=date],input[type=text],input[type=number],select{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;width:100%;min-width:0}
+input[type=month],input[type=date],input[type=text],input[type=number],input[type=email],input[type=password],select{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;width:100%;min-width:0}
 
 /* tabs */
 nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 0 calc(6px + env(safe-area-inset-bottom,0px));z-index:10}

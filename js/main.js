@@ -27,6 +27,8 @@ document.addEventListener('click',e=>{
     case 'cdel':delMyColor(el.dataset.c);break;
     case 'setsec':toggleSection(el.dataset.k);break;
     case 'catgrp':toggleCatGroup(el.dataset.k);break;
+    case 'memgrp':toggleMemGroup(el.dataset.k);break;
+    case 'jsx':openJarSpend(el.dataset.jid,el.dataset.k,el.dataset.m);break;
     case 'vertap':verTap();break;
     case 'devopen':openDev('home');break;
     case 'devgo':devView=el.dataset.v;if(devView==='changelog')clOpen=new Set(CHANGELOG.length?[CHANGELOG[0].v]:[]);devRender();break;
@@ -42,7 +44,7 @@ document.addEventListener('click',e=>{
     case 'catx':{if(!sumState)break;const k=el.dataset.k;sumState.open.has(k)?sumState.open.delete(k):sumState.open.add(k);rerenderSummary();break}
     case 'catmore':if(sumState){sumState.all.add(el.dataset.k);rerenderSummary()}break;
     case 'bell':openNotice();break;
-    case 'nclear':{const n=notice();if(n.v===APP_VERSION)setNotice(Object.assign(n,{cleared:true}));closeSheet();updateBell();break}
+    case 'nclear':{const n=notice();if(n.v===APP_VERSION)setNotice(Object.assign(n,{cleared:true}));clearMigNote();closeSheet();updateBell();break}
     case 'reloadapp':location.reload();break;
     case 'summary':openSummary(listMonth);break;
     case 'sumclose':closeSummary();break;
@@ -78,6 +80,7 @@ document.addEventListener('click',e=>{
       const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id)||Object.values(S.jarPlan||{}).some(jp=>(jp.hist||[]).some(x=>x.src===id&&+x.amt>0));
       if(S.buckets.length<=1){toast('至少要保留一個罐子');break}
       if(used){toast('這個罐子有紀錄或分類在用，先把分類改到別的罐子');break}
+      {const own=jarsList().find(j=>{const e=jarEff((S.jarPlan||{})[j.id],curMonth());return e&&e.src===id});if(own){toast(`「${own.name}」屬於這個罐子，先把它改到別的罐子`);break}}
       S.buckets=S.buckets.filter(b=>b.id!==id);
       for(const b of S.buckets)if(b.coverBy===id)b.coverBy=null;
       for(const jp of Object.values(S.jarPlan||{}))for(const x of (jp.hist||[]))if(x.coverBy===id)x.coverBy=null;
@@ -151,7 +154,6 @@ document.addEventListener('change',e=>{
     if(b.carry===false)b.carry=true; // pinned jars always carry (the menu only lists carrying jars)
     persist();render();return}
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
-  if(t.dataset.edit==='jcover'){setJarPlan(t.dataset.jid,'coverBy',bucketById(t.value)?t.value:null);persist();render();return}
   if(['bname','bamt','jamt','jname'].includes(t.dataset.edit))render();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('dev')){closeDev();return}if(document.getElementById('summary')){closeSummary();return}closeSheet()}if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][data-action]')){e.preventDefault();e.target.click();return}if(e.key==='Enter'&&e.target.id==='lq'){e.preventDefault();e.target.blur();return}if(e.key==='Enter'&&e.target.id==='emocustom'){e.preventDefault();const v=lastEmoji(e.target.value);if(v)applyEmoji(v);else toast('請輸入一個 emoji');return}if(e.key==='Enter'&&(e.target.id==='pw'||e.target.id==='em')){authDo('login');return}if(e.key==='Enter'&&draft&&e.target.tagName==='INPUT'){if(draft.ok&&!hasOp(draft.expr||''))saveDraft();return}
