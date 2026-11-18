@@ -46,6 +46,7 @@
 - 帳號登入（Google 或 Email）、多裝置即時同步、離線可用，連線後自動補傳。
 - 匯出／還原 JSON 備份、匯出 CSV。
 - 深色模式、動態效果設定（標準／減少／關閉）。
+- 回報問題：設定頁「關於與回報」可以在 App 裡回報問題或提出建議（可附最多 3 張圖片，以及版本、裝置資訊與最近的程式錯誤紀錄），並在「我的回報」查看處理進度；有新進度時通知鈴鐺會提醒。回報不包含任何記帳資料或金額。
 
 ---
 
@@ -74,11 +75,12 @@ css/
   sheet.css            記帳表單、計算機鍵盤、分類面板、emoji 面板
   settings.css         設定頁
   dev.css              開發者選項
+  report.css           回報問題：表單、我的回報、回報管理
   summary.css          月結算的共用版面與動畫
   themes.css           7 種結算風格
 js/
   color.js　罐子顏色面板（推薦色、我的顏色）與文字顏色自動調整
-  config.js            APP_VERSION（版本號）
+  config.js            APP_VERSION（版本號）、DEV_UID（開發者帳號）、程式錯誤紀錄
   changelog.js         CHANGELOG：每個版本的更新紀錄（通知鈴鐺與開發者選項的更新紀錄）
   state.js             共用工具、預設資料、全域狀態
   cloud.js             Firebase 同步
@@ -93,6 +95,7 @@ js/
   views/settings.js    設定頁
   summary.js           月結算與結算風格的設定
   dev.js               開發者選項
+  report.js            回報問題：送出回報（圖片壓縮）、我的回報、回報管理（只有開發者帳號）
   sheet.js             底部表單、emoji 面板
   entry.js             記一筆：計算機、分類、存檔
   ui.js                提示訊息與左滑刪除
@@ -134,7 +137,24 @@ jars/{jarId}/txns/{id}             共用罐紀錄，by = 記錄者
   src, srcId       撥款、墊付的來源罐子名稱與 id
 
 invites/{email}_{jarId}            共用邀請
+
+reports/{reportId}                 App 內回報：回報者本人與開發者能讀；只有開發者能修改、刪除
+  uid, name, email   回報者
+  type               'bug'（問題）| 'idea'（建議）| 'other'（其他）
+  area               相關功能（選填）：總覽、明細、記帳、月結算、共用罐、設定、其他
+  text               內容
+  imageCount         圖片數量（最多 3 張）
+  appVersion         App 版本（一定附上）
+  device, diag       勾選「一併附上…」時才有：{ua, screen, viewport, standalone, lang}、最近 10 筆程式錯誤 [{m, src, t}]
+  status             'new' 未讀 | 'read' 已讀 | 'doing' 處理中 | 'done' 已解決 | 'wontfix' 不處理
+  issue, fixedIn     GitHub issue 編號、修正的版本（選填）
+  reply              開發者的回覆（選填；不處理時說明原因）
+  createdAt, updatedAt, statusChangedAt
+
+reports/{reportId}/images/{0..2}   data：壓縮後的圖片（長邊 1280 像素的 JPEG，base64，單張不超過 700KB）
 ```
+
+開發者帳號的 uid 寫在 `js/config.js` 的 `DEV_UID` 與 `firestore.rules` 的 `isDev()`，兩處要一致。回報不使用 Cloud Storage，也不包含任何記帳資料。
 
 罐子餘額不另外儲存，每次都由紀錄即時計算，所以修改過去的紀錄後，之後月份的結轉與結算會自動跟著更新。
 
@@ -241,3 +261,4 @@ invites/{email}_{jarId}            共用邀請
 | v34 | 設定頁的支出分類依罐子分組，可展開、收合與組內拖拉排序；共用分類移到支出分類管理；個人分類不再扣共用罐，舊設定自動轉為共用分類 |
 | v35 | 開發者選項新增「更新紀錄」，列出每個版本的新功能、改善與修正；更新內容改由 `js/changelog.js` 管理 |
 | v36 | 共用罐改為屬於某個個人罐子，撥款與超支墊付從這個罐子出，並顯示為它的支出；個人支出改為計算撥給共用罐的錢，不再計入共用支出份額；成員與邀請移到「帳號與共用」分區；共用罐不再能手動轉入轉出 |
+| v37 | 設定頁新增「關於與回報」：在 App 內回報問題或建議（可附圖片、版本、裝置資訊與程式錯誤紀錄），在「我的回報」查看處理進度；開發者選項新增「回報管理」（只有開發者帳號看得到），通知鈴鐺提醒新回報與新進度 |

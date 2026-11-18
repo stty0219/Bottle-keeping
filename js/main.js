@@ -44,8 +44,21 @@ document.addEventListener('click',e=>{
     case 'catx':{if(!sumState)break;const k=el.dataset.k;sumState.open.has(k)?sumState.open.delete(k):sumState.open.add(k);rerenderSummary();break}
     case 'catmore':if(sumState){sumState.all.add(el.dataset.k);rerenderSummary()}break;
     case 'bell':openNotice();break;
-    case 'nclear':{const n=notice();if(n.v===APP_VERSION)setNotice(Object.assign(n,{cleared:true}));clearMigNote();closeSheet();updateBell();break}
+    case 'nclear':{const n=notice();if(n.v===APP_VERSION)setNotice(Object.assign(n,{cleared:true}));clearMigNote();if(rptNewsCount()){rptMarkSeen();renderIfSettings()}closeSheet();updateBell();break}
     case 'reloadapp':location.reload();break;
+    // 回報問題（js/report.js）
+    case 'rptnew':openRptForm();break;
+    case 'rpttype':rptSetType(el.dataset.t);break;
+    case 'rptpick':document.getElementById('rptFile').click();break;
+    case 'rptimgdel':rptDelImg(el.dataset.i);break;
+    case 'rptsend':rptSend();break;
+    case 'rptview':openRptView(id);break;
+    case 'rptgomine':gotoMyReports();break;
+    case 'rptgodev':closeSheet();openDev('reports');break;
+    case 'rptfilter':Rpt.filter=el.dataset.v;devRender(true);break;
+    case 'rptdev':rptOpenDev(id);break;
+    case 'rptsave':rptSave(id);break;
+    case 'rptdel':rptDelete(id);break;
     case 'summary':openSummary(listMonth);break;
     case 'sumclose':closeSummary();break;
     case 'cover':{coverOpen=!coverOpen;const s=el.closest('.settle');s.classList.toggle('open',coverOpen);el.setAttribute('aria-expanded',coverOpen);break}
@@ -125,6 +138,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='importFile'&&t.files[0]){importData(t.files[0]);t.value='';return}
+  if(t.id==='rptFile'){if(t.files&&t.files.length)rptAddFiles(t.files);t.value='';return}
   if(t.id==='lm'||t.id==='hm'){listMonth=t.value||curMonth();listCat=null;resetPie();render();return}
   if(t.dataset.edit==='bcarry'){bucketById(t.dataset.id).carry=t.checked;persist();render();return}
   if(draft){
