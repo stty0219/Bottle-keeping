@@ -1,5 +1,6 @@
 // 明細頁：紀錄列、月初結算、圓餅圖、搜尋
-const rowOf=t=>t.sys?sysRow(t):t.jarSpend?jarSpendRow(t):t.jid?sharedRow(t):txRow(t);
+// inAll: 全部 / the overview — a shared expense shows as 「美樂蒂・你記錄」 (full amount, display only)
+const rowOf=(t,inAll)=>t.sys?sysRow(t):t.jarSpend?jarSpendRow(t):t.jid?sharedRow(t,false,inAll):txRow(t);
 // my monthly contribution / overspending cover, shown as spending of the jar it comes from: title = shared jar name
 function jarSpendRow(t,noTap){
   const b=bucketById(t.src),sub=t.kind==='contrib'?'每月撥款':'超支墊付';
@@ -78,7 +79,7 @@ function sysRow(t){
     <div class="t2"><span class="dot" style="background:${t.color}"></span>${esc(t.jar)}</div></span><span class="amt num ${pos?'in':''}${t.neg?' neg':''}">${pos?'+':'−'}${money(Math.abs(t.amount))}</span></div></li>`;
 }
 const delAct=ref=>`<div class="del-act"><button data-action="swdel" data-ref="${esc(ref)}" tabindex="-1">刪除</button></div>`;
-function sharedRow(t,noSwipe){
+function sharedRow(t,noSwipe,inAll){
   const j=Cloud.jars[t.jid]||{};const me=myUid();
   let ic='🧾',t1='',sign='−',cls='';
   if(t.kind==='expense'){ic=t.emoji||'🧾';t1=t.catName||'支出'}
@@ -90,8 +91,11 @@ function sharedRow(t,noSwipe){
   const extra=((t.kind==='in'||t.kind==='contrib'||t.kind==='cover')&&t.src?'從'+esc(t.src)+'・':'')+(t.kind==='withdraw'&&t.src?'到'+esc(t.src)+'・':'')+(t.note&&t.kind!=='in'?esc(t.note)+'・':'');
   const canDel=!noSwipe&&t.by===me&&(t.kind==='expense'||((t.id||'').startsWith('m_')&&S.txns.some(x=>x.id===t.id.slice(2))));
   const ref=t.kind==='expense'?'s:'+t.jid+':'+t.id:'p:'+(t.id||'').slice(2);
+  const t2=inAll&&t.kind==='expense'
+    ?`${esc(j.name||'共用罐')}・${esc(who)}記錄${t.note?'｜'+esc(t.note):''}`
+    :`${esc(j.name||'共用罐')}（共用）・${extra}${esc(who)}${t.kind==='expense'?'・你的份額 '+money(myShare(t)):''}`;
   return `<li${canDel?` class="swipe"`:''}>${canDel?delAct(ref):''}<button class="tx" data-action="stx" data-jid="${t.jid}" data-id="${esc(t.id)}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div>
-    <div class="t2"><span class="dot" style="background:${j.color||'#999'}"></span>${esc(j.name||'共用罐')}（共用）・${extra}${esc(who)}${t.kind==='expense'?'・你的份額 '+money(myShare(t)):''}</div></span><span class="amt num ${cls}">${sign}${money(t.amount)}</span></button></li>`;
+    <div class="t2"><span class="dot" style="background:${j.color||'#999'}"></span>${t2}</div></span><span class="amt num ${cls}">${sign}${money(t.amount)}</span></button></li>`;
 }
 function sortTx(a,b){return a.date<b.date?1:a.date>b.date?-1:(b.ts||0)-(a.ts||0)}
 function txRow(t){
@@ -212,9 +216,11 @@ function listResultsHtml(){
   if(q)shown=shown.filter(t=>noteMatch(t,terms));
   const sys=(!q&&!listCat)?sysItems(listMonth,listBucket):[];
   const covs=(!q&&!listCat)?coverItems(listMonth,listBucket):[];
+  const inAll=listBucket==='all';
   let html='',last='',sumOut=0,sumIn=0,shOut=0,shMine=0,sumCov=0;const toJar={};
   for(const t of items){
     if(t.jarSpend){sumOut+=t.amount;toJar[t.jid]=(toJar[t.jid]||0)+t.amount} // my contribution / cover: spending of its source jar
+    else if(t.jid&&inAll)continue; // 全部: shared expenses are shown at full amount but are not my spending
     else if(t.jid){ // viewing a shared jar: its records, display only
       if(t.kind==='expense'){shOut+=t.amount;shMine+=myShare(t)}
       else if(t.kind==='cover')sumCov+=t.amount;else if(jarIn(t))sumIn+=t.amount;
@@ -224,25 +230,39 @@ function listResultsHtml(){
       if(t.type==='income')sumIn+=listBucket==='all'?t.amount:(incAlloc(t)[listBucket]||0);
     }
   }
-  const jarNote=Object.keys(toJar).map(jid=>`${esc(jarName(jid))} ${money(toJar[jid])}`).join('・');
-  // daily spending: my own expenses + my contributions / covers (a shared jar: its expenses, display only)
-  const spendOf=t=>t.jarSpend?t.amount:t.jid?(t.kind==='expense'?t.amount:0):(t.type==='expense'?t.amount:0);
-  const daySpend={};let found=0;
-  for(const t of shown){const v=spendOf(t);found+=v;if(v)daySpend[t.date]=(daySpend[t.date]||0)+v}
-  for(const t of shown){
-    if(t.date!==last){if(last)html+='</ul>';const d=new Date(t.date+'T00:00');const ds=daySpend[t.date];
-      const yr=all?d.getFullYear()+'年':'';
-      html+=`<div class="day"><span>${yr}${d.getMonth()+1}月${d.getDate()}日 週${'日一二三四五六'[d.getDay()]}</span>${ds?`<span class="dsum num">支出 ${money(ds)}</span>`:''}</div><ul class="txs">`;last=t.date}
-    html+=rowOf(t);
+  // 全部: my real spending = own expenses + money put into shared jars (the contribution / cover rows are not listed here)
+  let fullNote='';
+  if(inAll&&!q){
+    const sm=sharedSpend(listMonth);
+    for(const p of sm.parts){sumOut+=p.amount;toJar[sjId(p.id)]=p.amount}
+    fullNote=sharedFullNote(items);
   }
+  const jarNote=Object.keys(toJar).map(jid=>`${esc(jarName(jid))} ${money(toJar[jid])}`).join('・');
+  const jarNoteLine=!jarNote?'':inAll?`<br><span class="note">個人 ${money(sumOut-Object.values(toJar).reduce((a,v)=>a+v,0))}＋${jarNote.replace(/・/g,'＋')}</span>`
+    :`<br><span class="note">支出含${jarNote}</span>`;
+  // daily spending: my own expenses + my contributions / covers (a shared jar: its expenses, display only).
+  // 全部: shared expenses are added up per jar and shown apart, in a muted color
+  const spendOf=t=>t.jarSpend?t.amount:t.jid?(t.kind==='expense'&&!inAll?t.amount:0):(t.type==='expense'?t.amount:0);
+  const daySpend={},dayShared={},foundSh={};let found=0;
+  for(const t of shown){const v=spendOf(t);found+=v;if(v)daySpend[t.date]=(daySpend[t.date]||0)+v;
+    if(inAll&&t.jid&&t.kind==='expense'){const d=dayShared[t.date]||(dayShared[t.date]={});d[t.jid]=(d[t.jid]||0)+t.amount;foundSh[t.jid]=(foundSh[t.jid]||0)+t.amount}}
+  const shText=g=>jarsList().filter(j=>g&&g[j.id]).map(j=>`${esc(j.name)} ${money(g[j.id])}`).join('・');
+  for(const t of shown){
+    if(t.date!==last){if(last)html+='</ul>';const d=new Date(t.date+'T00:00');const ds=daySpend[t.date],sh=shText(dayShared[t.date]);
+      const yr=all?d.getFullYear()+'年':'';
+      const sum=[ds?`支出 ${money(ds)}`:'',sh?`<span class="dsh">${sh}</span>`:''].filter(Boolean).join('・');
+      html+=`<div class="day"><span>${yr}${d.getMonth()+1}月${d.getDate()}日 週${'日一二三四五六'[d.getDay()]}</span>${sum?`<span class="dsum num">${sum}</span>`:''}</div><ul class="txs">`;last=t.date}
+    html+=rowOf(t,inAll);
+  }
+  const foundShText=shText(foundSh);
   if(last)html+='</ul>';
   let catLabel='';
   if(listCat){const s=(pieData().slices.find(s=>s.key===listCat)||{});const c=resolveCat(listCat);catLabel=s.name||(c&&c.name)||'這個分類'}
   const totalLine=q
-    ?`<div class="total"><span>${all?'所有月份':'這個月'}</span><span class="num" style="text-align:right">找到 <b>${shown.length}</b> 筆　支出 <b>${money(found)}</b></span></div>`
+    ?`<div class="total"><span>${all?'所有月份':'這個月'}</span><span class="num" style="text-align:right">找到 <b>${shown.length}</b> 筆　支出 <b>${money(found)}</b>${foundShText?`・<span class="dsh">${foundShText}</span>`:''}</span></div>`
     :`<div class="total"><span>這個月</span><span class="num" style="text-align:right">${isSJ(listBucket)
       ?`共用支出 <b>${money(shOut)}</b>（你的份額 ${money(shMine)}）<br>撥入 <b>${money(sumIn)}</b>${sumCov?`・超支墊付 <b>${money(sumCov)}</b>`:''}`
-      :`支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${jarNote?`<br><span class="note">支出含${jarNote}</span>`:''}`}</span></div>`;
+      :`支出 <b>${money(sumOut)}</b>　收入 <b>${money(sumIn)}</b>${jarNoteLine}${fullNote}`}</span></div>`;
   const empty=q?`<div class="empty">${all?'所有月份':'這個月'}沒有符合「${esc(listQuery.trim())}」的紀錄。${all?'':'<br>可以切換到「所有月份」試試看。'}</div>`:'<div class="empty">這個月還沒有紀錄。</div>';
   return `${settleHtml(sys)}${coverHtml(covs)}${totalLine}
     ${q?'':pieHtml()}
