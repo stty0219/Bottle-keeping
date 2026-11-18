@@ -13,6 +13,10 @@ let devView='home',clOpen=new Set(); // clOpen: versions expanded on the changel
 const devTop=(back)=>`<div class="sum-top">${back?`<button class="back" data-action="devgo" data-v="${back[0]}">‹ ${back[1]}</button>`:'<span></span>'}<button class="sum-x" data-action="devclose" aria-label="關閉">✕</button></div>`;
 function themePreview(id,big){const tx=themeText(id);return `<div class="${big?'tpbig':'tp'} th-${id}"><div class="tpz">${THEMES[id].badge('S',tx.titles.S)}</div></div>`}
 function devHtml(){
+  if(devView==='reports'||devView.startsWith('report:')){
+    if(!isDev()){devView='home';return devHtml()} // 只看登入帳號是不是開發者，不看開發者模式
+    return devView==='reports'?rptDevListHtml():rptDevDetailHtml(devView.slice(7));
+  }
   if(devView==='rules'){
     const r=gradeRules(),pc=v=>Math.round(v*100);
     const rule=(g,label,sub,key,val,unit,max)=>`<div class="rule"><span class="gd g-${g}">${g}</span><span class="tx2">${label}<small>${sub}</small></span>
@@ -62,7 +66,9 @@ function devHtml(){
           <span class="clr"><span>${esc(r.date)}</span><span class="chev" aria-hidden="true">›</span></span></button>
           <div class="clb rel" id="cl-${i}"${open?'':' hidden'}>${relList(r.items)}</div></div>`}).join('')}`;
   }
+  const nu=rptUnread();
   return `${devTop(null)}<h1>開發者選項</h1>
+    ${isDev()?`<button class="devitem" data-action="devgo" data-v="reports"><span><span class="t">回報管理${nu?'<span class="rdot" aria-label="有新回報"></span>':''}</span><span class="s">${nu?`${nu} 則未讀・`:''}共 ${Rpt.list.length} 則回報</span></span><span>›</span></button>`:''}
     <button class="devitem" data-action="devgo" data-v="rules"><span><span class="t">評等條件</span><span class="s">調整 S、A、B 的判斷門檻，所有風格共用</span></span><span>›</span></button>
     <button class="devitem" data-action="devgo" data-v="themes"><span><span class="t">結算風格</span><span class="s">目前：${THEMES[themeId()].name}・切換風格、調整各風格的稱號與評語</span></span><span>›</span></button>
     <button class="devitem" data-action="devgo" data-v="changelog"><span><span class="t">更新紀錄</span><span class="s">目前 ${esc(APP_VERSION)}・共 ${CHANGELOG.length} 個版本${changelogOk()?'':'・⚠ 版本號不一致'}</span></span><span>›</span></button>

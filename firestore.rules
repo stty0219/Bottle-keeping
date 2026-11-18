@@ -94,5 +94,34 @@ service cloud.firestore {
         resource.data.owner == request.auth.uid
         || (verifiedEmail() && resource.data.email == myEmail()));
     }
+
+    // ---------- App 內回報問題 ----------
+    // 開發者帳號的 uid；修改時 js/config.js 的 DEV_UID 也要一起改
+    function isDev() { return signedIn() && request.auth.uid == '4wumuhJJLHQqQwcK4uNdwrXsrrc2'; }
+
+    match /reports/{rid} {
+      // 回報者本人，或開發者
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isDev());
+      // 只能用自己的身分新增；狀態必須是「未讀」，不能自己填 issue、修正版本、回覆
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'new'
+        && request.resource.data.type in ['bug', 'idea', 'other']
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 5000
+        && !request.resource.data.keys().hasAny(['issue', 'fixedIn', 'reply']);
+      // 修改狀態、回覆與刪除：只有開發者
+      allow update, delete: if isDev();
+
+      match /images/{n} {
+        // 和回報一起用 batch 寫入，所以用 getAfter 讀回報者；每則最多 3 張（0、1、2）
+        allow create: if signedIn()
+          && n in ['0', '1', '2']
+          && getAfter(/databases/$(database)/documents/reports/$(rid)).data.uid == request.auth.uid;
+        allow read: if signedIn() && (
+          isDev() || get(/databases/$(database)/documents/reports/$(rid)).data.uid == request.auth.uid);
+        allow delete: if isDev();
+      }
+    }
   }
 }

@@ -51,10 +51,11 @@ css/
   sheet.css            底部表單（記帳、計算機鍵盤、分類面板、emoji 與顏色面板）
   settings.css         設定頁
   dev.css              開發者選項
+  report.css           回報問題：表單、我的回報、回報管理、鈴鐺的回報通知
   summary.css          月結算的共用版面與動畫
   themes.css           月結算的 7 種風格（.th-<id>）
 js/
-  config.js            APP_VERSION（新版本偵測會讀取線上的這個檔案）
+  config.js            APP_VERSION（新版本偵測會讀取線上的這個檔案）、DEV_UID（開發者帳號）、程式錯誤紀錄（最早載入，記錄 error / unhandledrejection 最近 10 筆到 localStorage `fenguan-errlog`）
   changelog.js         CHANGELOG：所有版本的更新紀錄（由新到舊；鈴鐺顯示第一筆，開發者選項列出全部）
   state.js             共用工具、預設資料、全域狀態 S、本機儲存
   cloud.js             Firebase 同步：帳本、紀錄、寫入流程
@@ -68,7 +69,8 @@ js/
   views/list.js        明細頁
   views/settings.js    設定頁
   summary.js           月結算畫面與結算風格設定（THEMES）
-  dev.js               開發者選項（連點版本號 7 次開啟）：評等條件、結算風格、更新紀錄
+  dev.js               開發者選項（連點版本號 7 次開啟）：評等條件、結算風格、更新紀錄、回報管理（只有開發者帳號）
+  report.js            回報問題：監聽 reports、送出（圖片壓縮）、我的回報、回報管理頁面、鈴鐺的新回報／新進度
   sheet.js             底部表單開關、下拉收合、emoji 面板
   color.js             罐子顏色面板、依底色決定文字顏色
   entry.js             記一筆／編輯：計算機鍵盤、分類列、存檔
@@ -98,7 +100,17 @@ ledgers/{ledgerId}/txns/{id}  個人紀錄
 jars/{jarId}                  共用罐：owner, members[], memberInfo{}, name, color, categories[]（共用分類，順序即顯示順序，在設定頁「支出分類」管理）
 jars/{jarId}/txns/{id}        共用罐紀錄：kind = expense | contrib | in | withdraw | cover；by = 記錄者；split = 記錄當下人數；src/srcId = 撥款、墊付的來源罐子
 invites/{email}_{jarId}       共用邀請
+reports/{reportId}            App 內回報：uid, name, email, type（bug | idea | other）, area, text, imageCount, appVersion,
+                              device{ua, screen, viewport, standalone, lang}、diag[{m, src, t}]（勾選附上時才有）,
+                              status（new | read | doing | done | wontfix）, issue, fixedIn, reply, createdAt, updatedAt, statusChangedAt
+reports/{reportId}/images/{n} n = 0..2；data = 壓縮後的 JPEG（base64，長邊 1280，單張 ≤ 700KB）。和回報用同一個 batch 寫入
 ```
+
+回報問題（v37，`js/report.js`）：
+- **開發者帳號的 uid 寫在兩個地方，必須一致**：`js/config.js` 的 `DEV_UID`（決定畫面上是否顯示「回報管理」）與 `firestore.rules` 的 `isDev()`（真正的權限）。「回報管理」只看登入帳號是否為開發者，**不看**開發者模式（任何人都能開啟開發者模式）。
+- 一般帳號只監聽 `where('uid','==',自己)`，開發者監聽整個 `reports`；排序在手機上做，不需要複合索引。登入時 `startReports()`、登出時 `stopReports()`（在 `onAuthStateChanged`，不在 `cloudStop()`，因為 `subscribe()` 會先呼叫 `cloudStop()`）。
+- 開發者打開未讀的回報時自動改為已讀。回報者的「新進度」：狀態（未讀、已讀視為沒有進度）＋ issue ＋ 修正版本 ＋ 回覆組成的字串和 localStorage `fenguan-rptseen` 不同就算新進度；這台裝置第一次載入時，現有進度全部當作已看過。開發者本人的回報不顯示新進度。
+- 回報不包含任何記帳資料或金額；一般畫面不顯示錯誤紀錄。
 
 罐子餘額不儲存，每次都從紀錄即時計算。
 

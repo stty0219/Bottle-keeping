@@ -118,6 +118,7 @@ function settingsView(){
   +sec('display','顯示',motionLabel[motionPref()]||'','',`<label class="f">動態效果：畫面的動畫與過場效果<select data-edit="motion">
     ${[['standard','標準'],['reduce','減少'],['off','關閉']].map(([v,l])=>`<option value="${v}" ${motionPref()===v?'selected':''}>${l}</option>`).join('')}</select></label>
   <p class="note">減少：保留表單滑出等必要的過場，關閉裝飾性的動畫。關閉：所有動畫都會關閉。這個設定只套用在這台裝置。</p>`)
-  +`${devOn()?'<button class="devlink" data-action="devopen"><span>🛠 開發者選項</span><span>›</span></button>':''}
+  +sec('about','關於與回報',aboutSum(),aboutBadge(),aboutHtml())
+  +`${devOn()?`<button class="devlink" data-action="devopen"><span>🛠 開發者選項${rptUnread()?'<span class="rdot" aria-label="有新回報"></span>':''}</span><span>›</span></button>`:''}
   <p class="ver" data-action="vertap">Bottle-keeping ${esc(APP_VERSION)}</p>`;
 }

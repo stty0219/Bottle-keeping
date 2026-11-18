@@ -1,4 +1,4 @@
-// 通知鈴鐺：目前版本的更新內容、新版本偵測
+// 通知鈴鐺：目前版本的更新內容、新版本偵測、回報問題的新回報與新進度（js/report.js）
 /* ---------- notifications (鈴鐺) ---------- */
 const NOTICE_KEY='fenguan-notice',DAY=86400000;
 function notice(){try{return JSON.parse(localStorage.getItem(NOTICE_KEY))||{}}catch(e){return {}}}
@@ -10,7 +10,7 @@ let newVer=null,lastCheck=0;
 const MIG_KEY='fenguan-mignote';
 function migNote(){const n=S&&S.jarOwnerNote;if(!n||!n.items||!n.items.length)return null;try{if(localStorage.getItem(MIG_KEY)===String(n.at))return null}catch(e){}return n}
 function clearMigNote(){const n=S&&S.jarOwnerNote;if(n)try{localStorage.setItem(MIG_KEY,String(n.at))}catch(e){}}
-function updateBell(){const b=document.getElementById('bell');if(b){const on=unseen()||!!newVer||!!migNote();b.classList.toggle('has',on);b.setAttribute('aria-label',on?'通知（有新通知）':'通知')}}
+function updateBell(){const b=document.getElementById('bell');if(b){const on=unseen()||!!newVer||!!migNote()||rptUnread()>0||rptNewsCount()>0;b.classList.toggle('has',on);b.setAttribute('aria-label',on?'通知（有新通知）':'通知')}}
 const TAGS={new:'新功能',imp:'改善',fix:'修正'},TAG_ORDER=['new','imp','fix'];
 // 一個版本的更新項目，依新功能、改善、修正排序（通知面板與開發者選項的更新紀錄共用）
 function relList(items){
@@ -21,11 +21,14 @@ function noticeHtml(){
   const notes=notesVisible();
   let html=`<div class="ntop"><b>通知</b><button class="nclr" data-action="nclear" aria-label="清除通知並關閉">✕</button></div>`;
   if(newVer)html+=`<div class="upd"><div>有新版本 <b>${esc(newVer)}</b> 可以更新</div><button data-action="reloadapp">點此重新載入</button></div>`;
+  const nu=rptUnread(),nn=rptNewsCount(); // 開發者：未讀的回報；回報者：自己的回報有新進度
+  if(nu)html+=`<button class="nrpt" data-action="rptgodev"><span>有 ${nu} 則新回報</span><span>›</span></button>`;
+  if(nn)html+=`<button class="nrpt" data-action="rptgomine"><span>你的回報有新進度</span><span>›</span></button>`;
   const rel=CHANGELOG[0];
   const mn=migNote();
   if(mn)html+=`<div class="rel"><div class="rh"><b>共用罐設定已調整</b></div><ul>${mn.items.map(s=>`<li><span>${esc(s)}</span></li>`).join('')}</ul><p class="note" style="margin:6px 0 0">共用罐現在屬於你的某個罐子，每月撥款和超支時你的份額都從這個罐子扣。過去的月份維持原本的設定。</p></div>`;
   if(notes&&rel)html+=`<div class="rel"><div class="rh"><b>${esc(rel.v)} 更新內容</b><span>${esc(rel.date)}</span></div>${relList(rel.items)}</div>`;
-  if(!notes&&!newVer&&!mn)html+='<div class="nempty">目前沒有通知</div>';
+  if(!notes&&!newVer&&!mn&&!nu&&!nn)html+='<div class="nempty">目前沒有通知</div>';
   return html;
 }
 function openNotice(){

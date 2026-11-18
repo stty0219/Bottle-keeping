@@ -22,8 +22,8 @@ function cloudInit(){
     Cloud.ready=true;
     Cloud.auth.onAuthStateChanged(u=>{
       Cloud.user=u||null;
-      if(u)cloudConnect().catch(e=>{Cloud.err='雲端連線失敗：'+(e.message||e.code);renderIfSettings();syncStatus()});
-      else{cloudStop();syncStatus();renderIfSettings()}
+      if(u){cloudConnect().catch(e=>{Cloud.err='雲端連線失敗：'+(e.message||e.code);renderIfSettings();syncStatus()});startReports()}
+      else{cloudStop();stopReports();syncStatus();renderIfSettings()}
     });
   }catch(e){Cloud.err='Firebase 設定有誤：'+e.message}
 }
