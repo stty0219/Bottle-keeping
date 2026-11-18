@@ -28,7 +28,10 @@ document.addEventListener('click',e=>{
     case 'setsec':toggleSection(el.dataset.k);break;
     case 'catgrp':toggleCatGroup(el.dataset.k);break;
     case 'memgrp':toggleMemGroup(el.dataset.k);break;
-    case 'jsx':openJarSpend(el.dataset.jid,el.dataset.k,el.dataset.m);break;
+    case 'jsx':{ // a contribution / cover row of a personal jar: show that shared jar's records for the same month
+      const jid=el.dataset.jid;
+      if(!Cloud.jars[jid]){openJarSpend(jid,el.dataset.k,el.dataset.m);break} // no longer a member: explain instead
+      listBucket=SJ+jid;listMonth=el.dataset.m;listCat=null;resetPie();render();window.scrollTo(0,0);break}
     case 'vertap':verTap();break;
     case 'devopen':openDev('home');break;
     case 'devgo':devView=el.dataset.v;if(devView==='changelog')clOpen=new Set(CHANGELOG.length?[CHANGELOG[0].v]:[]);devRender();break;

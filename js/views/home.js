@@ -35,8 +35,15 @@ function coverNames(s){return [...new Set((s.coverParts||[]).map(p=>isSJ(p.id)?n
 // shared jar: this month's new overspending, and who hasn't covered their share yet
 function jarOverLine(jid,month){
   const j=Cloud.jars[jid],o=j&&jarOver(jid,month);if(!o||!o.over)return '';
-  if(!o.unpaid.length)return `<br><span class="note">超支 ${money(o.over)}・已墊付</span>`;
   const me=myUid();
+  if(!o.unpaid.length){ // all covered: 「超支已由兩人各墊付 $150」, or each payer when the amounts differ
+    const nm=u=>esc(u===me?'你':memberName(j,u)),ps=Object.keys(o.paid).filter(u=>o.paid[u]>0);
+    const amts=[...new Set(ps.map(u=>o.paid[u]))];
+    const txt=ps.length===1?`${nm(ps[0])}墊付 ${money(o.paid[ps[0]])}`
+      :amts.length===1?`${ps.length===2?'兩':ps.length+' '}人各墊付 ${money(amts[0])}`
+      :ps.map(u=>`${nm(u)}墊付 ${money(o.paid[u])}`).join('、');
+    return `<br><span class="note">超支已由${txt}</span>`;
+  }
   return `<br><span class="neg">超支 ${money(o.over)}・${o.unpaid.map(x=>`${esc(x.uid===me?'你':memberName(j,x.uid))}尚未墊付 ${money(x.amount)}`).join('、')}</span>`;
 }
 function coveredByName(s){return esc((bucketById(s.coveredBy)||{}).name||'')}
@@ -47,12 +54,15 @@ function myShare(t){const n=t.split||((Cloud.jars[t.jid]||{}).members||[]).lengt
 function monthRow(name,color,s,shared,jid,carry){
   if(shared||carry){ // this month's share: got / used / left, then the running total
     const m=monthShare(s);
-    let first;
-    if(shared){const mc=s.monthCover||0;
-      first=`本月撥入 ${money(m.in-mc)}${mc?`・超支墊付 ${money(mc)}`:''}・共用支出 ${money(s.monthOut)}（你的份額 ${money(jarShare(jid,listMonth))}）${jarOverLine(jid,listMonth)}`}
+    let first,left;
+    if(shared){ // 撥入 $2,000・共用支出 $2,300 ／ 本月剩 −$300 (covers are not part of 撥入 or 本月剩; noted below instead)
+      const inn=m.in-(s.monthCover||0),l=inn-s.monthOut;
+      m.in=inn;m.used=s.monthOut;
+      first=`撥入 ${money(inn)}・共用支出 ${money(s.monthOut)}`;
+      left=(l<0?`<span class="neg">本月剩 ${money(l)}</span>`:`本月剩 ${money(l)}`)+jarOverLine(jid,listMonth)}
     else{const parts=[],jt=jarPartsText(s);if(jt)parts.push(jt);if(s.covered)parts.push(`替${coverNames(s)}墊付 ${money(s.covered)}`);
-      first=`本月分到 ${money(m.in)}・用掉 ${money(m.used)}${parts.length?`（含${parts.join('・')}）`:''}${overLine(s)}`}
-    const left=m.left<0?`<span class="neg">${leftSub(m.left)}</span>`:leftSub(m.left);
+      first=`本月分到 ${money(m.in)}・用掉 ${money(m.used)}${parts.length?`（含${parts.join('・')}）`:''}${overLine(s)}`;
+      left=m.left<0?`<span class="neg">${leftSub(m.left)}</span>`:leftSub(m.left)}
     const w=m.in>0?Math.min(100,m.used/m.in*100):(m.used>0?100:0);
     return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">${first} ／ ${left}<br><span class="note">累積 ${money(s.bal)}</span></span></div>
   <div class="bar" style="display:flex"><i style="width:${w}%;background:${m.used>m.in?'var(--neg)':color}"></i></div></div>`;
@@ -65,7 +75,6 @@ function monthRow(name,color,s,shared,jid,carry){
   return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">${lab}</span></div>
   <div class="bar" style="display:flex"><i style="width:${spW}%;background:${used>avail?'var(--neg)':color}"></i></div></div>`;
 }
-function jarShare(jid,month){let s=0;for(const t of (Cloud.jarTxns[jid]||[]))if(t.kind==='expense'&&t.date.slice(0,7)===month)s+=myShare(t);return s}
 // my monthly contribution and overspending cover, as spending rows of the jar they come from (same numbers as stats())
 function jarSpendItems(month,filter){
   if(month===null)return []; // searching all months only matches notes; these rows have none
@@ -76,8 +85,20 @@ function jarSpendItems(month,filter){
         if(v)rows.push({jarSpend:true,id:'js_'+kind+'_'+jid+'_'+b.id,date:month+'-01',ts:0,jid,kind,amount:v,src:b.id})}}}
   return rows;
 }
+// expenses recorded inside my shared jars (full amount, display only — not my spending); month null = all months
+function sharedExpenseItems(month){
+  const rows=[];
+  for(const j of jarsList())for(const t of (Cloud.jarTxns[j.id]||[]))if(t.kind==='expense'&&(month===null||t.date.slice(0,7)===month))rows.push(t);
+  return rows;
+}
+// 全部 shows shared expenses at full amount; this line says what my spending counts instead
+function sharedFullNote(items){
+  const names=jarsList().filter(j=>items.some(t=>t.jid===j.id)).map(j=>esc(j.name));
+  return names.length?`<br><span class="note">${names.join('、')}的紀錄為共用支出全額，你的實際支出以撥款與墊付計算。</span>`:'';
+}
 // records for a month.
-// 全部 / a personal jar: my own records + my contributions and covers as spending of their source jar.
+// 全部 (what the money was spent on): my own records + the expenses inside my shared jars; no contribution / cover rows.
+// A personal jar (where its money went): its own records + my contributions and covers into shared jars.
 // A shared jar: all of its records (display only; its expenses are not my spending).
 function monthItems(month,filter){
   filter=filter||'all';
@@ -87,7 +108,7 @@ function monthItems(month,filter){
   }
   const rel=t=>filter==='all'||(t.type==='expense'&&t.bucketId===filter)||(t.type==='income'&&incAlloc(t)[filter])||(t.type==='transfer'&&(t.from===filter||t.to===filter));
   const own=S.txns.filter(t=>(month===null||t.date.slice(0,7)===month)&&rel(t));
-  return own.concat(jarSpendItems(month,filter)).sort(sortTx);
+  return own.concat(filter==='all'?sharedExpenseItems(month):jarSpendItems(month,filter)).sort(sortTx);
 }
 function homeView(){
   const st=stats(null,listMonth);
@@ -103,14 +124,14 @@ function homeView(){
   const monthRows=order.map(id=>{if(isSJ(id)){const j=Cloud.jars[sjId(id)];return monthRow(j.name,j.color,jarStats(sjId(id),listMonth),true,sjId(id))}const b=bucketById(id);return monthRow(b.name,b.color,st[b.id],false,null,carries(b))}).join('');
   const own=ownSpend(listMonth),sm=sharedSpend(listMonth,st);
   const spendNote=sm.parts.length?`<br><span class="note">個人 ${money(own)}${sm.parts.map(p=>`＋${esc(jarName(sjId(p.id)))} ${money(p.amount)}`).join('')}</span>`:'';
-  const items=monthItems(listMonth,'all');
+  const items=monthItems(listMonth,'all'),fullNote=sharedFullNote(items);
   const isNow=listMonth===curMonth();
   const any=S.txns.length||shared.length;
   const empty=!any?`<div class="empty">先記一筆收入，錢會依計畫分進各個罐子。</div>`:'';
   return `${cloudOn()?invitesHtml():''}${monthNav()}${listMonth<curMonth()?`<button class="sumbtn" data-action="summary">📊 查看 ${+listMonth.slice(5)} 月結算</button>`:''}<div class="shelf">${jars}${sjars}</div>
   <div class="total"><span>${isNow?'目前':'月底'}${shared.length?'我的罐子':'所有罐子'}合計</span><b class="num ${total<0?'neg':''}">${money(total)}</b></div>
   ${empty}
-  ${any?`<div class="total" style="margin-top:0;border-top:0"><span>這個月支出</span><span class="num"><b>${money(own+sm.total)}</b>${spendNote}</span></div>
+  ${any?`<div class="total" style="margin-top:0;border-top:0"><span>這個月支出</span><span class="num"><b>${money(own+sm.total)}</b>${spendNote}${fullNote}</span></div>
   <h2>這個月各罐</h2><div class="month-row">${monthRows}</div>
-  <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(rowOf).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
+  <h2>這個月的紀錄</h2>${items.length?`<ul class="txs">${items.slice(0,8).map(t=>rowOf(t,true)).join('')}</ul>${items.length>8?`<button class="more" data-action="tolist">查看這個月全部 ${items.length} 筆 ›</button>`:''}`:'<div class="empty">這個月還沒有紀錄。</div>'}`:''}`;
 }
