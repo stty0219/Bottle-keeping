@@ -149,8 +149,9 @@ function updateHint(){
     const c=resolveCat(d.catId);ok=ok&&!!c;
     if(c){const id=c.shared?SJ+c.jid:c.bucketId;const after=(c.shared?jarStats(c.jid,mk,exShared).bal:balanceOf(id,mk,d.editId))-amt;
       const b=!c.shared&&bucketById(id),cv=b&&coverOf(b);
-      // the jar's own balance before covering / being covered (what it covers for others doesn't trigger its own cover)
-      let own=0;if(cv){const s=stats(d.editId,mk)[id]||{bal:0};own=Math.max(0,s.bal-(s.over||0)+(s.covered||0)+(s.jarCover||0))}
+      // the jar's own balance before covering / being covered (what it covers for others doesn't trigger its own cover;
+      // money put into shared jars is its own spending, so it stays deducted)
+      let own=0;if(cv){const s=stats(d.editId,mk)[id]||{bal:0};own=Math.max(0,s.bal-(s.over||0)+(s.covered||0))}
       if(cv&&amt>own)
         msg=`「<b>${esc(b.name)}</b>」只剩 ${money(own)}，超出的 <span class="neg">${money(amt-own)}</span> 會由「<b>${esc(cv.name)}</b>」墊付`;
       else msg=`從「<b>${esc(nameOf(id))}</b>」扣除，扣完剩 <span class="${after<0?'neg':''}">${money(after)}</span>${after<0?'（會超支）':''}`}

@@ -148,10 +148,10 @@ function stats(excludeId,month){
     jpart(mk,t.srcId,jid).cover+=t.amount;
   }
   // walk month by month:
-  // 1. balance = carried in + this month's in − out
+  // 1. balance = carried in + this month's in − out. Money put into shared jars (monthly contribution + my share of
+  //    their overspending) is the owner jar's own spending, so it is taken here too
   // 2. a jar with coverBy has its own shortfall (from step 1) covered right away (墊付); not chained — a coverer that
-  //    goes negative by covering others stays negative. My share of a shared jar's overspending is taken from its
-  //    source jar the same way (after short is known, so it never triggers the source jar's own coverBy)
+  //    goes negative by covering other personal jars stays negative
   // 3. at month end every reset jar settles what it has left (or lacks) into sweepTo
   const sw=sweepBucket();
   const months=new Set([month,...Object.keys(jc)]);for(const id in per)for(const mk in per[id])months.add(mk);
@@ -160,10 +160,10 @@ function stats(excludeId,month){
   for(const mk of [...months].sort()){
     const isTarget=mk===month,open={},short={},cov={},covBy={};
     for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0};open[b.id]=bal[b.id];bal[b.id]+=cur.i-cur.o}
+    for(const x of (jc[mk]||[]))bal[x.src]-=x.amount; // my share of shared-jar overspending is the owner jar's own spending
     for(const b of S.buckets)short[b.id]=bal[b.id]<0?-bal[b.id]:0;
     for(const b of S.buckets){const c=coverOf(b);
       if(c&&short[b.id]>0){bal[b.id]+=short[b.id];bal[c.id]-=short[b.id];covBy[b.id]=c.id;(cov[c.id]||(cov[c.id]=[])).push({id:b.id,amount:short[b.id]})}}
-    for(const x of (jc[mk]||[]))bal[x.src]-=x.amount;
     if(isTarget){
       for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0},parts=cov[b.id]||[];
         const jp=(jx[mk]||[]).filter(p=>p.src===b.id).map(p=>({id:p.id,contrib:p.contrib,cover:p.cover,amount:p.contrib+p.cover}));
