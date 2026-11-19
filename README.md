@@ -2,7 +2,10 @@
 
 把每個月的收入分進不同的罐子，每一筆花費都從對應的罐子扣，隨時知道每個罐子還剩多少錢。
 
-![分罐記帳畫面](docs/screenshot.jpg)
+<p align="center">
+  <img src="docs/screenshot.jpg" alt="分罐記帳畫面" width="350">
+</p>
+
 
 **線上版本**：<https://stty0219.github.io/Bottle-keeping/>
 用手機瀏覽器開啟後選「加入主畫面」，就能像一般 App 一樣使用，沒有網路時也能記帳。
