@@ -125,13 +125,18 @@ const carries=b=>b.carry!==false||isPinned(b); // excessTo / sweepTo always carr
 function stats(excludeId,month){
   month=month||curMonth();
   const per={};S.buckets.forEach(b=>per[b.id]={});
-  const add=(id,mk,f,v)=>{const p=per[id];if(!p)return;(p[mk]||(p[mk]={i:0,o:0,j:0}))[f]+=v};
+  const add=(id,mk,f,v)=>{const p=per[id];if(!p)return;(p[mk]||(p[mk]={i:0,o:0,j:0,xi:0,xo:0}))[f]+=v};
+  // v40: a transfer between two personal jars, on the side of a jar that carries over, belongs to the carried money
+  // (xi: in, xo: out) rather than this month's share. Balances are unchanged; only how the month is reported.
+  // Old transfers into / out of shared jars keep counting in the month.
+  const xfer=(t,id)=>!!per[t.from]&&!!per[t.to]&&carries(bucketById(id));
   for(const t of S.txns){
     if(t.id===excludeId)continue;
     const mk=t.date.slice(0,7);if(mk>month)continue;
     if(t.type==='income'){if(t.mode==='one')add(t.target,mk,'i',t.amount)}
     else if(t.type==='expense')add(t.bucketId,mk,'o',t.amount);
-    else if(t.type==='transfer'){add(t.from,mk,'o',t.amount);add(t.to,mk,'i',t.amount)}
+    else if(t.type==='transfer'){add(t.from,mk,'o',t.amount);add(t.to,mk,'i',t.amount);
+      if(xfer(t,t.from))add(t.from,mk,'xo',t.amount);if(xfer(t,t.to))add(t.to,mk,'xi',t.amount)}
   }
   const pt=planTotals(excludeId);
   for(const mk in pt){if(mk>month)continue;const a=planAlloc(pt[mk],mk);for(const k in a)if(a[k])add(k,mk,'i',a[k])}
@@ -165,11 +170,14 @@ function stats(excludeId,month){
     for(const b of S.buckets){const c=coverOf(b);
       if(c&&short[b.id]>0){bal[b.id]+=short[b.id];bal[c.id]-=short[b.id];covBy[b.id]=c.id;(cov[c.id]||(cov[c.id]=[])).push({id:b.id,amount:short[b.id]})}}
     if(isTarget){
-      for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0},parts=cov[b.id]||[];
+      for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0,xi:0,xo:0},parts=cov[b.id]||[];
         const jp=(jx[mk]||[]).filter(p=>p.src===b.id).map(p=>({id:p.id,contrib:p.contrib,cover:p.cover,amount:p.contrib+p.cover}));
         const jcov=jp.reduce((a,p)=>a+p.cover,0);
-        // monthOut = own spending + transfers out (no shared-jar money); jarOut = contribution + cover paid into shared jars
-        out[b.id]={open:open[b.id],monthIn:cur.i,monthOut:cur.o-cur.j,monthJar:cur.j,jarCover:jcov,jarOut:cur.j+jcov,jarParts:jp,bal:bal[b.id],sweep:0,short:short[b.id],
+        // monthIn = this month's share (no transfers into the carried money); monthOut = own spending + transfers out
+        // that count in the month (no shared-jar money); jarOut = contribution + cover paid into shared jars.
+        // Transfers out of the carried money use max(0,open) + transfers in first; xferShare is what took this month's share
+        const xferShare=Math.max(0,cur.xo-(Math.max(0,open[b.id])+cur.xi));
+        out[b.id]={open:open[b.id],monthIn:cur.i-cur.xi,monthOut:cur.o-cur.j-cur.xo,xferIn:cur.xi,xferOut:cur.xo,xferShare,monthJar:cur.j,jarCover:jcov,jarOut:cur.j+jcov,jarParts:jp,bal:bal[b.id],sweep:0,short:short[b.id],
           over:covBy[b.id]?short[b.id]:0,coveredBy:covBy[b.id]||null,covered:parts.reduce((a,p)=>a+p.amount,0),coverParts:parts}}
       break;
     }

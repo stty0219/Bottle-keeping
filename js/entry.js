@@ -176,6 +176,14 @@ function updateHint(){
     const both=isSJ(d.from)&&isSJ(d.to);
     ok=ok&&d.from!==d.to&&!both;
     msg=d.from===d.to?'請選兩個不同的罐子':both?'共用罐之間不能直接轉移，請經過自己的罐子':`「${esc(nameOf(d.from))}」目前有 ${money(balanceOf(d.from,mk,d.editId))}`;
+    // v40: out of a carrying jar into another personal jar: the carried money goes first, then this month's share
+    const fb=bucketById(d.from);
+    if(ok&&fb&&carries(fb)&&bucketById(d.to)){
+      const s=stats(d.editId,mk)[fb.id]||{open:0,bal:0},xi=s.xferIn||0,xo=s.xferOut||0;
+      const cap=Math.max(0,s.open)+xi,y=Math.max(0,xo+amt-cap)-Math.max(0,xo-cap);
+      msg+=y>0?`，其中 <span class="neg">${money(y)}</span> 會動用本月份額`:'，從之前累積的錢轉出，不影響本月份額';
+      if(s.bal-amt<0)msg+=`<br><span class="neg">轉出後「${esc(fb.name)}」會變成負數</span>`;
+    }
   }
   h.innerHTML=msg;d.ok=ok;updateKeypad();
 }

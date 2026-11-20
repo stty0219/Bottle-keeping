@@ -15,7 +15,10 @@ function monthNav(){
     <button class="arr" data-action="mshift" data-d="1" aria-label="下個月" ${listMonth>=latest?'disabled':''}>›</button></div>`;
 }
 // this month's share of a carrying jar / shared jar: what it got, what it used (incl. covering), what is left of it
-function monthShare(s){const used=s.monthOut+(s.jarOut||0)+(s.covered||0);return {in:s.monthIn,used,left:s.bal-s.open}}
+// v40: transfers between carrying jars use the carried money first (xferShare = the part that took this month's share),
+// so carried = open + transfers in − transfers out + xferShare, and carried + left = bal
+function monthShare(s){const xs=s.xferShare||0,used=s.monthOut+(s.jarOut||0)+(s.covered||0)+xs;
+  return {in:s.monthIn,used,left:s.bal-(s.open+(s.xferIn||0)-(s.xferOut||0)+xs)}}
 // 「含美樂蒂 $1,500」：撥給共用罐的錢（每月撥款＋超支墊付），算這個罐子的支出
 function jarPartsText(s){return (s.jarParts||[]).filter(p=>p.amount).map(p=>`${esc(jarName(sjId(p.id)))} ${money(p.amount)}`).join('・')}
 // carrying jars show this month's share (water level = left ÷ got); reset jars keep the old level
@@ -61,10 +64,11 @@ function monthRow(name,color,s,shared,jid,carry){
       first=`撥入 ${money(inn)}・共用支出 ${money(s.monthOut)}`;
       left=(l<0?`<span class="neg">本月剩 ${money(l)}</span>`:`本月剩 ${money(l)}`)+jarOverLine(jid,listMonth)}
     else{const parts=[],jt=jarPartsText(s);if(jt)parts.push(jt);if(s.covered)parts.push(`替${coverNames(s)}墊付 ${money(s.covered)}`);
+      if(s.xferShare)parts.push(`轉出 ${money(s.xferShare)}`);
       first=`本月分到 ${money(m.in)}・用掉 ${money(m.used)}${parts.length?`（含${parts.join('・')}）`:''}${overLine(s)}`;
       left=m.left<0?`<span class="neg">${leftSub(m.left)}</span>`:leftSub(m.left)}
     const w=m.in>0?Math.min(100,m.used/m.in*100):(m.used>0?100:0);
-    return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">${first} ／ ${left}<br><span class="note">累積 ${money(s.bal)}</span></span></div>
+    return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">${first} ／ ${left}<br><span class="note">累積 ${money(s.bal)}${s.xferIn?`・本月轉入 ${money(s.xferIn)}`:''}${s.xferOut?`・轉出 ${money(s.xferOut)}`:''}</span></span></div>
   <div class="bar" style="display:flex"><i style="width:${w}%;background:${m.used>m.in?'var(--neg)':color}"></i></div></div>`;
   }
   const avail=Math.max(0,s.open)+s.monthIn;
