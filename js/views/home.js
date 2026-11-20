@@ -19,12 +19,25 @@ function monthNav(){
 // so carried = open + transfers in − transfers out + xferShare, and carried + left = bal
 function monthShare(s){const xs=s.xferShare||0,used=s.monthOut+(s.jarOut||0)+(s.covered||0)+xs;
   return {in:s.monthIn,used,left:s.bal-(s.open+(s.xferIn||0)-(s.xferOut||0)+xs)}}
+// v41: a carrying jar / shared jar that got nothing this month (monthIn 0, transfers in excluded) shows its running total:
+// avail = max(0,open) + transfers in; level = bal ÷ avail (0–1), 「空」 only when both are 0;
+// spent = own spending + money put into shared jars + covering other jars. null when the jar got a share this month.
+function accumView(s){
+  if(s.monthIn!==0)return null;
+  const xi=s.xferIn||0,xo=s.xferOut||0,spent=s.monthOut+(s.jarOut||0)+(s.covered||0),avail=Math.max(0,s.open)+xi;
+  return {xi,xo,spent,avail,ratio:avail>0?Math.max(0,Math.min(1,s.bal/avail)):0,empty:avail===0&&s.bal===0};
+}
+// one line under the jar: transfers out, then spending, then transfers in, else 累積中
+function accumSub(a){return a.xo?`本月轉出 ${money(a.xo)}`:a.spent?`本月支出 ${money(a.spent)}`:a.xi?`本月轉入 ${money(a.xi)}`:'累積中'}
 // 「含美樂蒂 $1,500」：撥給共用罐的錢（每月撥款＋超支墊付），算這個罐子的支出
 function jarPartsText(s){return (s.jarParts||[]).filter(p=>p.amount).map(p=>`${esc(jarName(sjId(p.id)))} ${money(p.amount)}`).join('・')}
-// carrying jars show this month's share (water level = left ÷ got); reset jars keep the old level
+// carrying jars show this month's share (water level = left ÷ got), or the running total when they got nothing (v41);
+// reset jars keep the old level
 function jarCol(id,name,color,s,sub,shared,bad,carry){
   let base,ratio;
-  if(carry){const m=monthShare(s);base=m.in;ratio=base>0?Math.max(0,Math.min(1,m.left/base)):0}
+  const a=carry&&accumView(s);
+  if(a){base=a.empty?0:1;ratio=a.ratio}
+  else if(carry){const m=monthShare(s);base=m.in;ratio=base>0?Math.max(0,Math.min(1,m.left/base)):0}
   else{base=Math.max(0,s.open)+s.monthIn;ratio=base>0?Math.max(0,Math.min(1,s.bal/base)):0}
   return `<div class="jarcol" role="button" tabindex="0" data-action="jump" data-bucket="${id}" aria-label="${esc(name)}，月底餘額 ${money(s.bal)}，${sub}">
     <div class="jar ${s.bal<0||s.over?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${color}"></div>
@@ -55,6 +68,16 @@ function leftSub(left){return left<0?`本月超用 ${money(-left)}`:`本月剩 $
 // my share of a shared expense: split by the member count when it was recorded
 function myShare(t){const n=t.split||((Cloud.jars[t.jid]||{}).members||[]).length||1;return Math.round(t.amount/n)}
 function monthRow(name,color,s,shared,jid,carry){
+  const a=(shared||carry)&&accumView(s);
+  if(a){ // v41, got nothing this month: 本月轉入 $I・轉出 $X・支出 $S ／ 累積 $T (only what changed), or just 累積 $T
+    const parts=[],jt=shared?'':jarPartsText(s),inc=[];
+    if(jt)inc.push(jt);if(!shared&&s.covered)inc.push(`替${coverNames(s)}墊付 ${money(s.covered)}`);
+    if(a.xi)parts.push(`轉入 ${money(a.xi)}`);if(a.xo)parts.push(`轉出 ${money(a.xo)}`);
+    if(a.spent)parts.push(`支出 ${money(a.spent)}${inc.length?`（含${inc.join('・')}）`:''}`);
+    const tot=`累積 ${money(s.bal)}`,line=parts.length?`本月${parts.join('・')} ／ ${tot}`:tot;
+    return `<div class="mrow"><div class="lab"><span><span class="dot" style="background:${color}"></span>${esc(name)}${shared?'（共用）':''}</span><span class="num">${line}${shared?jarOverLine(jid,listMonth):overLine(s)}</span></div>
+  <div class="bar" style="display:flex"><i style="width:${(a.ratio*100).toFixed(1)}%;background:${color}"></i></div></div>`;
+  }
   if(shared||carry){ // this month's share: got / used / left, then the running total
     const m=monthShare(s);
     let first,left;
@@ -118,9 +141,12 @@ function homeView(){
   const st=stats(null,listMonth);
   const order=shelfIds(),shared=jarsList();
   const jars=order.map(id=>{
-    if(isSJ(id)){const j=Cloud.jars[sjId(id)],s=jarStats(sjId(id),listMonth),l=monthShare(s).left;return jarCol(id,j.name,j.color,s,leftSub(l),true,l<0,true)}
+    if(isSJ(id)){const j=Cloud.jars[sjId(id)],s=jarStats(sjId(id),listMonth),a=accumView(s);
+      if(a)return jarCol(id,j.name,j.color,s,accumSub(a),true,false,true); // v41: no contribution this month
+      const l=monthShare(s).left;return jarCol(id,j.name,j.color,s,leftSub(l),true,l<0,true)}
     const b=bucketById(id),s=st[b.id];
     if(carries(b)){if(s.over)return jarCol(b.id,b.name,b.color,s,`超支 ${money(s.over)}`,false,true,true); // covered: own overspending in red
+      const a=accumView(s);if(a)return jarCol(b.id,b.name,b.color,s,accumSub(a),false,false,true); // v41: got nothing this month
       const l=monthShare(s).left;return jarCol(b.id,b.name,b.color,s,leftSub(l),false,l<0,true)}
     return jarCol(b.id,b.name,b.color,s,s.short?`超支 ${money(s.short)}`:'每月歸零',false,!!s.short,false)}).join('');
   const sjars='';
