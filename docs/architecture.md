@@ -13,6 +13,28 @@
 
 相關文件：計算規則見 [calculation-rules.md](calculation-rules.md)；部署與 Firebase 設定見 [deployment.md](deployment.md)。
 
+### 系統架構
+
+每位成員的手機各自執行同一個 PWA。資料先存在本機（localStorage），登入後由同步層和 Firestore 保持一致，所以沒有網路也能記帳；共用罐就是兩個帳號透過 Firestore 讀寫同一份資料。程式檔案由 GitHub Pages 提供，經過 Service Worker 快取；App 另外會讀取線上的 `js/config.js`，偵測是否有新版本。
+
+```mermaid
+flowchart LR
+  A[你的手機] --> PWA
+  B[對方的手機] --> PWA
+  subgraph PWA[分罐記帳 PWA]
+    UI[畫面<br/>總覽、明細、設定、表單、月結算]
+    CALC[計算核心<br/>分配、結轉、墊付]
+    SYNC[同步層<br/>帳本、共用罐、回報]
+    LOCAL[(本機儲存<br/>localStorage)]
+    SW[Service Worker<br/>離線快取]
+  end
+  SYNC <--> LOCAL
+  SYNC --> AUTH[Firebase Auth<br/>Google、Email 登入]
+  SYNC <--> FS[(Firestore<br/>資料庫與安全規則)]
+  GH[GitHub Pages<br/>提供程式檔案] --> SW
+  UI -.->|新版本偵測| GH
+```
+
 ---
 
 ## 離線與版本更新
@@ -27,6 +49,36 @@
 ---
 
 ## 檔案結構與職責
+
+### App 內部分層
+
+從概念上把程式分成四層，箭頭表示上層使用下層。實際上所有檔案共用同一個全域範圍，**不是嚴格分層**：例如同步層收到雲端資料後會呼叫 `safeRender()` 重繪畫面，舊資料轉換也分散在多個檔案（見[舊資料轉換](#舊資料轉換)）。
+
+```mermaid
+flowchart TB
+  subgraph L1[事件與畫面]
+    E[事件分派<br/>data-action] --- V[總覽與明細<br/>含本月份額] --- ST[設定] --- F[表單與面板] --- SUM[月結算]
+  end
+  subgraph L2[計算核心]
+    P[計畫分配] --- M[逐月推進] --- C[超支墊付] --- JO[共用罐超支平分] --- SP[個人支出]
+  end
+  subgraph L3[狀態與同步]
+    STATE[狀態 S<br/>localStorage] --- LS[帳本同步] --- J[共用罐<br/>撥款、墊付鏡像] --- RPT[回報問題]
+  end
+  subgraph L4[平台]
+    SWK[Service Worker] --- VER[版本、更新紀錄<br/>與通知] --- MIG[資料轉換] --- ERR[錯誤紀錄]
+  end
+  L1 --> L2 --> L3 --> L4
+```
+
+| 層 | 主要檔案 |
+|---|---|
+| 事件與畫面 | `main.js`、`views/home.js`、`views/list.js`、`views/settings.js`、`summary.js`、`dev.js`、`sheet.js`、`entry.js`、`color.js`、`ui.js`、`reorder.js` |
+| 計算核心 | `calc.js`（評等在 `summary.js`） |
+| 狀態與同步 | `state.js`、`cloud.js`、`shared-jars.js`、`account.js`、`report.js` |
+| 平台 | `sw.js`、`config.js`、`changelog.js`、`notify.js`、`setup.js`、`init.js` |
+
+### 檔案
 
 ```
 index.html             畫面骨架；CSS 與 JS 的載入順序寫在這裡
@@ -49,7 +101,7 @@ css/
 docs/                  專案文件
 ```
 
-### js/
+#### js/
 
 依載入順序排列：
 
@@ -104,6 +156,30 @@ firebase-config.js → Firebase SDK（app、auth、firestore compat）
 
 - 互動元素用 `data-action="xxx"` 標記，由 `main.js` 的 click／input／change 監聽器依 `data-action`、`data-edit` 分派。不要寫 inline `onclick`。
 - 畫面更新呼叫 `render()`。雲端同步觸發的重繪使用 `safeRender()`：使用者正在編輯 `#view` 裡的輸入框時，先暫緩重繪，離開欄位後才更新。
+
+---
+
+## 計算核心概覽
+
+`stats()` 每次都從紀錄重新計算所有罐子的餘額。只有「依計畫分配」的收入會先經過計畫分配；支出、轉移、全部放入一罐的收入直接進入逐月推進。撥給共用罐的錢有兩個來源：每月撥款依自己的撥款設定 `jarPlan` 計算；超支份額則讀取自己寫入共用罐的 `cover` 紀錄。兩者都算所屬罐子自己的支出。
+
+這張圖只是概覽，各步驟的規則與輸出欄位以 [calculation-rules.md](calculation-rules.md) 為準。
+
+```mermaid
+flowchart TB
+  R[個人紀錄<br/>支出、轉移、全部放入一罐的收入] --> MW
+  RI[依計畫分配的收入] --> PA[計畫分配<br/>依每月金額分配，超出計畫的放入 excessTo]
+  JP[撥款設定 jarPlan<br/>每月撥款] --> MW
+  CV[自己寫入共用罐的 cover 紀錄<br/>超支份額] --> MW
+  PA --> MW
+  subgraph MW["逐月推進 stats()，每個月依序計算"]
+    B1[本月餘額<br/>上月結轉＋本月進－本月出] --> B2[超支墊付<br/>依 coverBy，不連鎖] --> B3[月底結算<br/>歸零罐子結算進 sweepTo]
+  end
+  MW --> O1[罐子餘額]
+  MW --> O2[本月份額<br/>水位、本月剩]
+  MW --> O3[個人支出<br/>月結算與評等]
+  B3 -.->|成為下個月的上月結轉| B1
+```
 
 ---
 
@@ -245,6 +321,26 @@ reports/{reportId}/images/{n}      回報的圖片
 - **共用罐（`startJars()`）**：監聽自己是成員的 `jars`，以及每個罐子的 `txns`。成員關係變動時，同步調整 `jarPlan`（新罐子建立撥款設定；不再是成員時設定 `until`）。
 - **mirror（`desiredMirrors()`、`syncMirrors()`）**：每台裝置依自己的 `jarPlan` 與個人紀錄，算出應該存在於共用罐、由自己寫入的紀錄（`contrib`、`cover`、`m_` 開頭的 `in`／`withdraw`），和共用罐中實際的紀錄比對後新增、更新或刪除。資料有變動時延遲 1.2 秒執行。
   - 不同版本的裝置同時在線時，可能互相覆蓋撥款紀錄（尚未加版本保護）。
+
+### 共用罐同步流程
+
+以共用罐超支為例：任何成員記下共用支出後，每位成員的 App 都會收到即時快照，用 `jarOver()` 算出本月新超支，依**目前**成員人數平分，再由自己的裝置寫入自己的份額。每台裝置算出的結果必須一致，各自只寫自己的紀錄。份額的計算方式見 [calculation-rules.md](calculation-rules.md#5-共用罐超支依人數平分jarover)。
+
+```mermaid
+sequenceDiagram
+  participant P as 對方的 App
+  participant FS as Firestore
+  participant Y as 你的 App
+  Note over P,Y: 每位成員也依自己的撥款設定，寫入每月撥款 contrib_{uid}_{月份}
+  P->>FS: 在共用罐記一筆支出
+  FS-->>Y: 即時快照更新
+  Y->>Y: jarOver() 計算本月新超支，依目前成員人數平分
+  Y->>FS: 寫入自己的份額 cover_{uid}_{月份}
+  FS-->>P: 即時快照更新
+  FS-->>Y: 即時快照更新
+  Y->>Y: 從所屬罐子扣除自己的份額，不足時由該罐子的 coverBy 墊付
+  Note over P,Y: 對方的 App 也會計算並寫入對方自己的份額，沒有寫入的成員會標示「尚未墊付」
+```
 
 ---
 
