@@ -3,7 +3,9 @@
 把每個月的收入分進不同的罐子，每一筆花費都從對應的罐子扣，隨時知道每個罐子還剩多少錢。
 
 <p align="center">
-  <img src="docs/screenshot.jpg" alt="分罐記帳畫面" width="350">
+  <img src="docs\S__64880644_0.jpg" width="32%" />
+  <img src="docs\S__64880645_0.jpg" width="32%" />
+  <img src="docs\S__64880646_0.jpg" width="32%" />
 </p>
 
 
