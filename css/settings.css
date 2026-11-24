@@ -5,7 +5,13 @@
 .carry{grid-column:2/-1;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:-2px}
 .carry input{width:18px;height:18px;accent-color:var(--ink)}
 .carry.cover{margin-top:0}
-.carry.cover select{width:auto;flex:0 1 auto;padding:5px 10px}
+.carry.cover select,.carry.kind select{width:auto;flex:0 1 auto;padding:5px 10px}
+.carry.kind{margin-top:0;flex-wrap:wrap}
+.kind-why{flex-basis:100%;font-size:12px}
+/* v43 轉換提示（罐子分區最上方，按「知道了」後不再顯示） */
+.kind-note{background:var(--surface);border:1.5px solid var(--ink);border-radius:14px;padding:12px 14px;margin:0 0 12px;display:grid;gap:6px;font-size:14px}
+.kind-note p{margin:0;color:var(--muted);font-size:13px}
+.kind-note .ghost{justify-self:start;padding:6px 14px}
 /* 共用罐卡片（罐子分區）：和個人罐子一樣用細線分隔，不加外框 */
 .jarcards{display:grid}
 .jarcard{display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}

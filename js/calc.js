@@ -77,8 +77,12 @@ function planTotals(excludeId){ // month -> total of plan-following income
   return m;
 }
 const planSum=mk=>targets(mk).reduce((a,b)=>a+Math.max(0,b.amt),0);
-// where income above the plan goes (excessTo) and where reset jars settle at month end (sweepTo); both always carry
-function fallbackPin(){const c=S.buckets.filter(b=>b.carry!==false);return c[c.length-1]||S.buckets[S.buckets.length-1]}
+// v43: a personal jar is a spending jar (kind:'spend') or a savings jar (kind:'save').
+// A savings jar always carries over (carry:true); a spending jar carries only when 「沒花完的錢留到下個月」 is on (carry:true).
+// Jars from before v43 have no kind yet: a carrying jar counts as savings (migrateKind() fills it in).
+const isSave=b=>!!b&&(b.kind?b.kind==='save':b.carry!==false);
+// where income above the plan goes (excessTo) and where reset jars settle at month end (sweepTo); both are savings jars
+function fallbackPin(){const c=S.buckets.filter(isSave);return c[c.length-1]||S.buckets[S.buckets.length-1]}
 function excessBucket(){return bucketById(S.excessTo)||fallbackPin()}
 function sweepBucket(){return bucketById(S.sweepTo)||fallbackPin()}
 // the jar that covers b's overspending (never itself), or null
@@ -120,16 +124,33 @@ let horizonCache=null;
 function horizon(){if(horizonCache)return horizonCache;return horizonCache=S.txns.reduce((a,t)=>t.date.slice(0,7)>a?t.date.slice(0,7):a,curMonth())}
 function shiftMonth(mk,d){const [y,m]=mk.split('-').map(Number);const dt=new Date(y,m-1+d,1);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')}
 const isPinned=b=>!!b&&S.buckets.length>0&&(excessBucket().id===b.id||sweepBucket().id===b.id);
-const carries=b=>b.carry!==false||isPinned(b); // excessTo / sweepTo always carry
+// carries over: savings jars, spending jars with 「留到下個月」 on, and excessTo / sweepTo (always savings after migrateKind()).
+// On migrated data this is exactly the pre-v43 rule (carry !== false, or pinned), so balances don't change
+const carries=b=>isSave(b)||b.carry===true||isPinned(b);
+/* v43: once per ledger (flag kindV43), every jar gets a kind: a jar that carried over → savings (carry:true),
+   a jar that reset every month → spending (carry:false). Balances stay the same; only how the jar is shown changes.
+   Jars added later without a kind (e.g. from an older device) are filled in the same way. kindNote asks the user to
+   check the types in settings until dismissed. */
+function migrateKind(){
+  if(!S.buckets||!S.buckets.length)return false;
+  let changed=false;
+  for(const b of S.buckets){
+    if(b.kind!=='save'&&b.kind!=='spend'){const c=carries(b);b.kind=c?'save':'spend';b.carry=c;changed=true}
+    else if(b.kind==='save'&&b.carry!==true){b.carry=true;changed=true}
+    else if(b.kind==='spend'&&isPinned(b)){b.kind='save';b.carry=true;changed=true} // excessTo / sweepTo are savings jars (they already carried)
+  }
+  if(!S.kindV43){S.kindV43=true;S.kindNote=true;changed=true}
+  return changed;
+}
 // balances for one month: open (carried in) + this month's in − out
 function stats(excludeId,month){
   month=month||curMonth();
   const per={};S.buckets.forEach(b=>per[b.id]={});
   const add=(id,mk,f,v)=>{const p=per[id];if(!p)return;(p[mk]||(p[mk]={i:0,o:0,j:0,xi:0,xo:0}))[f]+=v};
-  // v40: a transfer between two personal jars, on the side of a jar that carries over, belongs to the carried money
-  // (xi: in, xo: out) rather than this month's share. Balances are unchanged; only how the month is reported.
+  // v43: on the side of a savings jar, a transfer between two personal jars is kept apart (xi: in, xo: out) — it is not
+  // money saved this month. Spending jars count transfers in the month. Balances are unchanged; only how the month is shown.
   // Old transfers into / out of shared jars keep counting in the month.
-  const xfer=(t,id)=>!!per[t.from]&&!!per[t.to]&&carries(bucketById(id));
+  const xfer=(t,id)=>!!per[t.from]&&!!per[t.to]&&isSave(bucketById(id));
   for(const t of S.txns){
     if(t.id===excludeId)continue;
     const mk=t.date.slice(0,7);if(mk>month)continue;
@@ -173,11 +194,9 @@ function stats(excludeId,month){
       for(const b of S.buckets){const cur=per[b.id][mk]||{i:0,o:0,j:0,xi:0,xo:0},parts=cov[b.id]||[];
         const jp=(jx[mk]||[]).filter(p=>p.src===b.id).map(p=>({id:p.id,contrib:p.contrib,cover:p.cover,amount:p.contrib+p.cover}));
         const jcov=jp.reduce((a,p)=>a+p.cover,0);
-        // monthIn = this month's share (no transfers into the carried money); monthOut = own spending + transfers out
+        // monthIn = what came in this month (a savings jar: 本月存入, no transfers); monthOut = own spending + transfers out
         // that count in the month (no shared-jar money); jarOut = contribution + cover paid into shared jars.
-        // Transfers out of the carried money use max(0,open) + transfers in first; xferShare is what took this month's share
-        const xferShare=Math.max(0,cur.xo-(Math.max(0,open[b.id])+cur.xi));
-        out[b.id]={open:open[b.id],monthIn:cur.i-cur.xi,monthOut:cur.o-cur.j-cur.xo,xferIn:cur.xi,xferOut:cur.xo,xferShare,monthJar:cur.j,jarCover:jcov,jarOut:cur.j+jcov,jarParts:jp,bal:bal[b.id],sweep:0,short:short[b.id],
+        out[b.id]={open:open[b.id],monthIn:cur.i-cur.xi,monthOut:cur.o-cur.j-cur.xo,xferIn:cur.xi,xferOut:cur.xo,monthJar:cur.j,jarCover:jcov,jarOut:cur.j+jcov,jarParts:jp,bal:bal[b.id],sweep:0,short:short[b.id],
           over:covBy[b.id]?short[b.id]:0,coveredBy:covBy[b.id]||null,covered:parts.reduce((a,p)=>a+p.amount,0),coverParts:parts}}
       break;
     }

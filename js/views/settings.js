@@ -68,8 +68,13 @@ function catGroupsHtml(){
 function settingsView(){
   const open=new Set(setOpenKeys()),sec=(k,t,s,b,h)=>setSection(k,t,s,b,h,open.has(k));
   const ex=excessBucket(),sw=sweepBucket(),exName=esc(ex?.name||'');
-  const pinWhy=b=>ex&&sw&&ex.id===b.id&&sw.id===b.id?'收入超過計畫的錢和歸零罐子的月底結算都放在這裡，一定會結轉'
-    :ex&&ex.id===b.id?'收入超過計畫的錢放在這裡，一定會結轉':'歸零罐子的月底結算放在這裡，一定會結轉';
+  const pinWhy=b=>ex&&sw&&ex.id===b.id&&sw.id===b.id?'收入超過計畫的錢和歸零罐子的月底結算都放在這裡'
+    :ex&&ex.id===b.id?'收入超過計畫的錢放在這裡':'歸零罐子的月底結算放在這裡';
+  // v43: type (spending / savings); a spending jar can keep what is left for next month
+  const kindRow=b=>{const save=isSave(b);
+    return `<label class="carry kind">類型<select data-edit="bkind" data-id="${b.id}" aria-label="${esc(b.name)}的類型">
+      <option value="spend" ${save?'':'selected'}>花費</option><option value="save" ${save?'selected':''}>儲蓄</option></select>${save&&isPinned(b)?`<span class="kind-why">${pinWhy(b)}</span>`:''}</label>
+    ${save?'':`<label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${b.carry===true?'checked':''}>沒花完的錢留到下個月</label>`}`};
   const coverOpts=b=>`<option value="">不墊付</option>`+S.buckets.filter(o=>o.id!==b.id).map(o=>`<option value="${o.id}" ${o.id===b.coverBy?'selected':''}>${esc(o.name)}</option>`).join('');
   const bl=S.buckets.map(b=>`<div class="set-item amt-mode brow" data-id="${b.id}">
     <span class="dh" data-drag="bucket" aria-label="按住拖拉調整順序" title="按住拖拉調整順序">≡</span>
@@ -77,9 +82,9 @@ function settingsView(){
     <input type="text" value="${esc(b.name)}" data-edit="bname" data-id="${b.id}" aria-label="罐子名稱">
     <input type="number" inputmode="numeric" min="0" step="100" value="${+b.amt||0}" data-edit="bamt" data-id="${b.id}" aria-label="每月金額">
     <button class="icon-btn" data-action="delb" data-id="${b.id}" aria-label="刪除罐子">✕</button>
-    <label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${carries(b)?'checked':''} ${isPinned(b)?'disabled':''}>${isPinned(b)?pinWhy(b):'沒用完的錢結轉到下個月'}</label>
+    ${kindRow(b)}
     <label class="carry cover">超支時從<select data-edit="bcover" data-id="${b.id}" aria-label="${esc(b.name)}超支時由哪個罐子墊付">${coverOpts(b)}</select>扣</label></div>`).join('');
-  const carryOpts=id=>S.buckets.filter(carries).map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
+  const carryOpts=id=>S.buckets.filter(isSave).map(b=>`<option value="${b.id}" ${b.id===id?'selected':''}>${esc(b.name)}</option>`).join('');
   const allocSum=!ex?'':ex.id===sw.id?ex.name:`多的→${ex.name}・結算→${sw.name}`;
   const cats=catGroupsHtml();
 
@@ -93,8 +98,11 @@ function settingsView(){
   const motionLabel={standard:'標準',reduce:'減少',off:'關閉'};
 
   return sec('account','帳號與共用',acctSum,acctBadge,`${accountHtml()}${verifyHtml()}${membersHtml()}`)
-  +sec('jars','罐子',jarsSum,'',`<h3 class="sec-sub">個人罐子</h3>
+  +sec('jars','罐子',jarsSum,S.kindNote?'請檢查類型':'',`${S.kindNote?`<div class="kind-note" role="status"><b>罐子改為「花費型」與「儲蓄型」</b>
+    <p>原本每月歸零的罐子改為花費型，原本會結轉的罐子改為儲蓄型，金額都沒有變。請檢查每個罐子的類型是否符合用途。</p>
+    <button class="ghost" data-action="kindok">知道了</button></div>`:''}<h3 class="sec-sub">個人罐子</h3>
   <p class="note">設定每個罐子每月要放多少錢。同一個月的收入會加總後依計畫分配；修改金額會重新計算所有月份。「全部放入一罐」的收入不受影響。按住左側的 ≡ 可以拖拉調整順序。</p>
+  <p class="note">花費型：用來花的錢，月底歸零，也可以選擇把沒花完的錢留到下個月。儲蓄型：用來存的錢，一定會累積到下個月，顯示這個月淨存了多少。</p>
   <div id="bucketList">${bl}</div>
   <div class="pctsum" id="plansum">每月計畫合計 <b class="num">${money(planSum())}</b></div>
   ${planSum()?'':`<p class="note" style="color:var(--neg);margin:6px 0 0">還沒有設定每月金額，收入會全部放入「${exName}」。</p>`}
@@ -103,7 +111,7 @@ function settingsView(){
   ${sharedHtml()}`)
   +sec('alloc','分配與結算',allocSum,'',`<div class="plan-extra" style="margin-top:0"><label class="f">收入超過計畫的錢放入<select data-edit="excessTo">${carryOpts(ex?.id)}</select></label>
   <label class="f">歸零罐子月底的剩餘或不足放入<select data-edit="sweepTo">${carryOpts(sw?.id)}</select></label>
-  <p class="note" style="margin:0">這兩個選單只列出會結轉的罐子。不結轉的罐子每月從計畫重新開始，月底剩下的錢（或不足的部分）會結算進「${esc(sw?.name||'')}」。</p>
+  <p class="note" style="margin:0">這兩個選單只列出儲蓄型罐子。月底歸零的花費型罐子每月從計畫重新開始，月底剩下的錢（或不足的部分）會結算進「${esc(sw?.name||'')}」。</p>
   <p class="note" style="margin:0">罐子超支時由誰墊付，在「罐子」分區的每個罐子各自設定。</p>
   <p class="note" style="margin:0">收入不足計畫時，會依各罐計畫金額等比例分配。</p></div>`)
   +sec('cats','支出分類',`${cats.n} 個`,'',`<p class="note" style="margin-top:0">選了分類，就會自動從對應的罐子扣錢。按住左側的 ≡ 可以在同一個罐子內拖拉調整順序。</p>
