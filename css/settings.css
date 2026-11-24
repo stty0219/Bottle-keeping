@@ -8,6 +8,9 @@
 .carry.cover select,.carry.kind select{width:auto;flex:0 1 auto;padding:5px 10px}
 .carry.kind{margin-top:0;flex-wrap:wrap}
 .kind-why{flex-basis:100%;font-size:12px}
+/* v44 儲蓄型的目標金額（字體維持 16px，避免 iPhone 聚焦時放大） */
+.carry.goal{margin-top:0}
+.carry.goal input{width:9em;height:auto;flex:0 1 auto;padding:5px 10px}
 /* v43 轉換提示（罐子分區最上方，按「知道了」後不再顯示） */
 .kind-note{background:var(--surface);border:1.5px solid var(--ink);border-radius:14px;padding:12px 14px;margin:0 0 12px;display:grid;gap:6px;font-size:14px}
 .kind-note p{margin:0;color:var(--muted);font-size:13px}

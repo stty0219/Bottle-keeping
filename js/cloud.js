@@ -1,7 +1,7 @@
 // Firebase 登入後的雲端同步：帳本、紀錄、寫入流程
 /* ---------- cloud (Firebase) ---------- */
 const Cloud={ready:false,user:null,fs:null,auth:null,ref:null,unsubs:[],metaTimer:null,err:'',busy:false,
-  ledgerLoaded:false,jars:{},jarTxns:{},jarLoaded:{},jarUnsubs:{},jarsUnsub:null,inviteUnsubs:[],invites:[],sent:[],jarTimers:{},jarsLoaded:false,jarsFresh:false};
+  ledgerLoaded:false,txnsLoaded:false,authKnown:false,jars:{},jarTxns:{},jarLoaded:{},jarUnsubs:{},jarsUnsub:null,inviteUnsubs:[],invites:[],sent:[],jarTimers:{},jarsLoaded:false,jarsFresh:false};
 function cloudConfigured(){return !!(window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.apiKey&&window.firebase)}
 function cloudOn(){return !!(Cloud.user&&Cloud.ref)}
 function syncStatus(){
@@ -21,14 +21,14 @@ function cloudInit(){
     Cloud.fs.enablePersistence({synchronizeTabs:true}).catch(()=>{});
     Cloud.ready=true;
     Cloud.auth.onAuthStateChanged(u=>{
-      Cloud.user=u||null;
+      Cloud.user=u||null;Cloud.authKnown=true; // v44: savings goal checks wait until the sign-in state is known
       if(u){cloudConnect().catch(e=>{Cloud.err='雲端連線失敗：'+(e.message||e.code);renderIfSettings();syncStatus()});startReports()}
       else{cloudStop();stopReports();syncStatus();renderIfSettings()}
     });
   }catch(e){Cloud.err='Firebase 設定有誤：'+e.message}
 }
 function cloudStop(){
-  Cloud.unsubs.forEach(f=>{try{f()}catch(e){}});Cloud.unsubs=[];Cloud.ref=null;Cloud.ledgerLoaded=false;
+  Cloud.unsubs.forEach(f=>{try{f()}catch(e){}});Cloud.unsubs=[];Cloud.ref=null;Cloud.ledgerLoaded=false;Cloud.txnsLoaded=false;
   stopJars();
 }
 
@@ -87,7 +87,7 @@ function subscribe(ref){
     scheduleMirror();
   },fail));
   Cloud.unsubs.push(ref.collection('txns').onSnapshot(qs=>{
-    S.txns=qs.docs.map(d=>Object.assign({},d.data(),{id:d.id}));
+    S.txns=qs.docs.map(d=>Object.assign({},d.data(),{id:d.id}));Cloud.txnsLoaded=true;
     saveLocal();safeRender();syncStatus();scheduleMirror();
   },fail));
   renderIfSettings();syncStatus();
