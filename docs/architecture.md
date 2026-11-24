@@ -57,7 +57,7 @@ flowchart LR
 ```mermaid
 flowchart TB
   subgraph L1[事件與畫面]
-    E[事件分派<br/>data-action] --- V[總覽與明細<br/>含本月份額] --- ST[設定] --- F[表單與面板] --- SUM[月結算]
+    E[事件分派<br/>data-action] --- V[總覽與明細<br/>依罐子類型顯示] --- ST[設定] --- F[表單與面板] --- SUM[月結算]
   end
   subgraph L2[計算核心]
     P[計畫分配] --- M[逐月推進] --- C[超支墊付] --- JO[共用罐超支平分] --- SP[個人支出]
@@ -116,7 +116,7 @@ docs/                  專案文件
 | `setup.js` | 舊資料轉換 `migrate()`、`migrateAlloc()`；防止雙指縮放；動態效果設定 |
 | `notify.js` | 通知鈴鐺（目前版本的更新內容、v36 轉換說明、回報通知）、新版本偵測 |
 | `init.js` | 啟動流程 `init()`、匯出／還原備份、匯出 CSV |
-| `calc.js` | 計算核心：計畫分配、共用罐撥款、結轉、月底結算、超支墊付、共用罐超支平分；`migrateCover()`、`migrateJarPlan()`、`migrateJarOwner()` |
+| `calc.js` | 計算核心：罐子類型（`isSave()`、`carries()`）、計畫分配、共用罐撥款、結轉、月底結算、超支墊付、共用罐超支平分；`migrateCover()`、`migrateKind()`、`migrateJarPlan()`、`migrateJarOwner()` |
 | `views/home.js` | `render()`、總覽頁；以及明細與總覽共用的紀錄清單 `monthItems()`、`jarSpendItems()`、`sharedExpenseItems()` |
 | `views/list.js` | 明細頁：紀錄列、月初結算、本月超支墊付、圓餅圖、搜尋 |
 | `views/settings.js` | 設定頁（分區展開狀態、支出分類分組） |
@@ -176,7 +176,7 @@ flowchart TB
     B1[本月餘額<br/>上月結轉＋本月進－本月出] --> B2[超支墊付<br/>依 coverBy，不連鎖] --> B3[月底結算<br/>歸零罐子結算進 sweepTo]
   end
   MW --> O1[罐子餘額]
-  MW --> O2[本月份額<br/>水位、本月剩]
+  MW --> O2[總覽的顯示<br/>花費型：可用、超支<br/>儲蓄型：本月淨存、累積]
   MW --> O3[個人支出<br/>月結算與評等]
   B3 -.->|成為下個月的上月結轉| B1
 ```
@@ -193,12 +193,14 @@ flowchart TB
 
 | 欄位 | 說明 |
 |---|---|
-| `buckets[]` | 個人罐子 `{id, name, color, amt, carry, coverBy}`。`amt` 是每月金額；`carry:false` 表示每月歸零；`coverBy` 是超支時墊付的個人罐子 id（`null` 表示不墊付，不能是自己）。舊資料可能留有 `pct`（比例），已不使用 |
+| `buckets[]` | 個人罐子 `{id, name, color, amt, kind, carry, coverBy}`。`amt` 是每月金額；`kind` 是類型：`'spend'` 花費型、`'save'` 儲蓄型（v43）；`carry` 表示會不會結轉：儲蓄型一律是 `true`，花費型的 `true` 表示「沒花完的錢留到下個月」，`false` 表示月底歸零（舊版裝置只看 `carry`，所以算出的金額一致）；`coverBy` 是超支時墊付的個人罐子 id（`null` 表示不墊付，不能是自己）。舊資料可能留有 `pct`（比例），已不使用 |
 | `categories[]` | 個人分類 `{id, emoji, name, bucketId}`。`bucketId` 只能是個人罐子；陣列順序就是設定頁與分類面板中各組內的順序 |
 | `txns[]` | 個人紀錄，見下方「紀錄」 |
 | `allocMode` | 固定為 `'amount'`（比例模式已在 v26 移除，舊資料由 `migrateAlloc()` 轉換） |
-| `excessTo` | 收入超過計畫的錢放入的罐子 |
-| `sweepTo` | 歸零罐子月底的剩餘或不足放入的罐子 |
+| `excessTo` | 收入超過計畫的錢放入的罐子（只能是儲蓄型） |
+| `sweepTo` | 歸零罐子月底的剩餘或不足放入的罐子（只能是儲蓄型） |
+| `kindV43` | v43 罐子類型轉換（`migrateKind()`）已完成的旗標 |
+| `kindNote` | 轉換後在設定頁「罐子」分區顯示提示，請使用者檢查每個罐子的類型；任何一台裝置按「知道了」後改為 `false`，所有裝置都不再顯示 |
 | `remainderId` | v31 以前的「指定罐子」。v32 起只由 `migrateCover()` 讀取（帳本沒有 `excessTo`、`sweepTo` 時轉換）；寫回雲端時填入 `sweepTo` 的值，給舊版裝置使用 |
 | `jarPlan{}` | 自己對各共用罐的撥款設定，key 是共用罐 id：`{from, until, name, hist[]}`。`from` 是開始撥款的月份；`until` 是不再是成員後停止的月份（不含）；`name` 是共用罐名稱的備份；`hist[]` 每筆 `{m, amt, src, coverBy}`，從 `m` 月起生效 |
 | `jarOwnerV36` | v36 共用罐所屬罐子轉換（`migrateJarOwner()`）已完成的旗標 |
@@ -259,7 +261,7 @@ reports/{reportId}                 App 內回報
 reports/{reportId}/images/{n}      回報的圖片
 ```
 
-**`ledgers/{ledgerId}`**：`name`、`owner`、`members[]`（只有本人）、`createdAt`、`updatedAt`，以及 `S` 中會同步的欄位（`buckets`、`categories`、`allocMode`、`excessTo`、`sweepTo`、`remainderId`、`jarPlan`、`shelfOrder`、`gradeRules`、`sumTheme`、`themeText`、`myColors`、`jarOwnerV36`、`jarOwnerNote`、`gradeComments`）。
+**`ledgers/{ledgerId}`**：`name`、`owner`、`members[]`（只有本人）、`createdAt`、`updatedAt`，以及 `S` 中會同步的欄位（`buckets`、`categories`、`allocMode`、`excessTo`、`sweepTo`、`remainderId`、`jarPlan`、`shelfOrder`、`gradeRules`、`sumTheme`、`themeText`、`myColors`、`jarOwnerV36`、`jarOwnerNote`、`kindV43`、`kindNote`、`gradeComments`）。
 
 **`jars/{jarId}`**：`owner`、`members[]`、`memberInfo{uid: {name, email}}`、`name`、`color`、`categories[]`（共用分類 `{id, emoji, name}`，陣列順序即顯示順序，在設定頁「支出分類」管理）、`createdAt`、`updatedAt`。
 
@@ -305,6 +307,7 @@ reports/{reportId}/images/{n}      回報的圖片
 | `migrate()` | `setup.js` | 很舊的收入紀錄（`alloc`）轉成 `mode`（只在啟動與還原時執行） |
 | `migrateAlloc()` | `setup.js` | v26：比例分配轉成每月金額，`allocMode` 改為 `'amount'` |
 | `migrateCover()` | `calc.js` | v32：`remainderId` 轉成 `excessTo`、`sweepTo` 與歸零罐子的 `coverBy`；清除無效的 `coverBy`、`excessTo`、`sweepTo` |
+| `migrateKind()` | `calc.js` | v43：沒有 `kind` 的罐子依 `carries()` 補上類型（會結轉 → 儲蓄型 `carry:true`；每月歸零 → 花費型 `carry:false`），所以餘額不變。每次都會補（舊版裝置新增的罐子也會補到）；儲蓄型的 `carry` 一律改回 `true`；`excessTo`、`sweepTo` 指定的罐子一律是儲蓄型。第一次轉換時設定 `kindV43` 與 `kindNote`。要在 `migrateCover()` 之後執行 |
 | `migrateJarPlan()` | `calc.js` | 舊的撥款設定（`amt`）轉成 `hist[]` |
 | `migrateJarOwner()` | `calc.js` | v36：從當月起 `coverBy = src`，過去月份不變；改到的設定記在 `jarOwnerNote` |
 | `migrateTheme()` | `summary.js` | v22 的 `gradeComments` 轉入 `themeText.classic`（還原備份時不執行） |

@@ -111,8 +111,8 @@ function monthData(mk){
     exps.push({key:p.id,name:jarName(sjId(p.id)),emoji:'🫙',amount:p[kind],full:p[kind],date:mk+'-01',note:(kind==='contrib'?'每月撥款':'超支墊付')+'・從'+b.name,shared:false,jar:true,mine:true});
   const spend=exps.reduce((a,e)=>a+e.amount,0);
   const cats={};for(const e of exps){const g=cats[e.key]||(cats[e.key]={key:e.key,name:e.name,emoji:e.emoji,jar:!!e.jar,value:0,count:0,n:0});g.value+=e.amount;g.n++;if(e.mine)g.count++}
-  // v40: 可用 includes transfers in; transfers between carrying jars aren't spending (shown as 轉出 instead)
-  const jars=S.buckets.map(b=>{const s=st[b.id]||{open:0,monthIn:0,monthOut:0,bal:0};return {name:b.name,color:b.color,avail:Math.max(0,s.open)+s.monthIn+(s.xferIn||0),spent:s.monthOut+(s.jarOut||0),xferOut:s.xferOut||0,bal:s.bal,short:s.short||0,over:s.over||0,coveredBy:s.coveredBy||null,covered:s.covered||0}});
+  // spending jars: 花了 / 可用 (transfers count in the month). v43 savings jars: 本月淨存 and 累積 (save = saveView())
+  const jars=S.buckets.map(b=>{const s=st[b.id]||{open:0,monthIn:0,monthOut:0,bal:0};return {name:b.name,color:b.color,save:isSave(b)&&st[b.id]?saveView(s):null,avail:Math.max(0,s.open)+s.monthIn+(s.xferIn||0),spent:s.monthOut+(s.jarOut||0),xferOut:s.xferOut||0,bal:s.bal,short:s.short||0,over:s.over||0,coveredBy:s.coveredBy||null,covered:s.covered||0}});
   const sjars=jarsList().map(j=>{const s=jarStats(j.id,mk);return {name:j.name,color:j.color,avail:Math.max(0,s.open)+s.monthIn,spent:s.monthOut,bal:s.bal,shared:true}});
   return {mk,inc,spend,net:inc-spend,exps,cats:Object.values(cats).sort((a,b)=>b.value-a.value),jars,sjars,
     over:jars.filter(j=>j.short>0).length, // the jar's own overspending counts, covered or not; going negative by covering others doesn't
@@ -191,7 +191,8 @@ function summaryHtml(mk,tid){
   const jr=j=>`<div class="jrow"><span class="nm"><span class="dot" style="background:${j.color}"></span>${esc(j.name)}${j.shared?'<span class="pill">共用</span>':''}</span>
     <span class="st ${j.bal<0||j.over?'bad':'good'}">${j.over?L.jarBad(j.over)+`（${esc((bucketById(j.coveredBy)||{}).name||'')}墊付）`
       :j.bal<0&&!j.shared&&!j.short?'墊付後不足 '+money(-j.bal):j.bal<0?L.jarBad(-j.bal):L.jarOk(j.bal)}</span>
-    <span class="ds num">花了 ${money(j.spent)} ／ 可用 ${money(j.avail)}${j.xferOut?`・轉出 ${money(j.xferOut)}`:''}${j.covered?`・墊付超支 ${money(j.covered)}`:''}</span></div>`;
+    <span class="ds num">${j.save?`${j.save.net<0?`<span class="bad">${netText(j.save.net)}</span>`:netText(j.save.net)} ／ 累積 ${money(j.bal)}`
+      :`花了 ${money(j.spent)} ／ 可用 ${money(j.avail)}${j.xferOut?`・轉出 ${money(j.xferOut)}`:''}${j.covered?`・墊付超支 ${money(j.covered)}`:''}`}</span></div>`;
   html+=`<section class="${A()}"><h3>${L.jars}</h3>${d.jars.map(jr).join('')}${d.sjars.map(jr).join('')}
     ${d.sjars.length?'<p class="note" style="margin:8px 0 0">共用罐不列入你的評等。</p>':''}</section>`;
   // highlights + comparison

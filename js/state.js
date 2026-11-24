@@ -6,13 +6,14 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const money=n=>(n<0?'−':'')+'$'+Math.abs(Math.round(n)).toLocaleString('zh-TW');
 
 function defaults(){
-  const inv={id:'b_inv',name:'投資',pct:30,color:PALETTE[0]},day={id:'b_day',name:'日常',pct:50,color:PALETTE[1]},flex={id:'b_flex',name:'彈性',pct:20,color:PALETTE[2]};
+  // v43: 投資、彈性 are savings jars (彈性 takes income above the plan and the month-end settlement); 日常 resets every month
+  const inv={id:'b_inv',name:'投資',pct:30,kind:'save',carry:true,color:PALETTE[0]},day={id:'b_day',name:'日常',pct:50,kind:'spend',carry:false,color:PALETTE[1]},flex={id:'b_flex',name:'彈性',pct:20,kind:'save',carry:true,color:PALETTE[2]};
   const c=(e,n,b)=>({id:uid(),emoji:e,name:n,bucketId:b.id});
   return {v:1,allocMode:'amount',excessTo:flex.id,sweepTo:flex.id,buckets:[inv,day,flex],categories:[
     c('🍱','餐飲',day),c('🚌','交通',day),c('🛒','日用品',day),c('🏠','居住',day),c('📱','電信',day),
     c('📈','股票/ETF',inv),c('🏦','儲蓄',inv),
     c('🎬','娛樂',flex),c('✈️','旅遊',flex),c('🛍️','購物',flex),c('🎁','禮物',flex)
-  ],txns:[],myColors:[]};
+  ],txns:[],myColors:[],kindV43:true,kindNote:false};
 }
 
 let S=null;               // state

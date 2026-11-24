@@ -26,6 +26,7 @@ document.addEventListener('click',e=>{
     case 'cedit':toggleColorEdit();break;
     case 'cdel':delMyColor(el.dataset.c);break;
     case 'setsec':toggleSection(el.dataset.k);break;
+    case 'kindok':S.kindNote=false;persist();render();break; // v43 conversion notice: dismissed for every device
     case 'catgrp':toggleCatGroup(el.dataset.k);break;
     case 'memgrp':toggleMemGroup(el.dataset.k);break;
     case 'jsx':{ // a contribution / cover row of a personal jar: show that shared jar's records for the same month
@@ -91,7 +92,7 @@ document.addEventListener('click',e=>{
     case 'pie':{const k=el.dataset.key;if(listBucket==='all'){listBucket=k;listCat=null;resetPie()}else listCat=listCat===k?null:k;render();break}
     case 'jump':listBucket=el.dataset.bucket;listCat=null;resetPie();tab='list';render();window.scrollTo(0,0);break;
     case 'lb':listBucket=el.dataset.b;listCat=null;resetPie();render();break;
-    case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,amt:0,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break;
+    case 'addb':S.buckets.push({id:'b_'+uid(),name:'新罐子',pct:0,amt:0,kind:'spend',carry:false,color:PALETTE[S.buckets.length%PALETTE.length]});persist();render();break; // v43: a new jar is a spending jar that resets every month
     case 'delb':{
       const used=S.txns.some(t=>t.bucketId===id||(t.type==='income'&&t.mode==='one'&&t.target===id)||t.from===id||t.to===id)||S.categories.some(c=>c.bucketId===id)||Object.values(S.jarPlan||{}).some(jp=>(jp.hist||[]).some(x=>x.src===id&&+x.amt>0));
       if(S.buckets.length<=1){toast('至少要保留一個罐子');break}
@@ -102,6 +103,7 @@ document.addEventListener('click',e=>{
       for(const jp of Object.values(S.jarPlan||{}))for(const x of (jp.hist||[]))if(x.coverBy===id)x.coverBy=null;
       if(S.excessTo===id)S.excessTo=fallbackPin().id;
       if(S.sweepTo===id)S.sweepTo=fallbackPin().id;
+      for(const p of [excessBucket(),sweepBucket()])if(p&&!isSave(p)){p.kind='save';p.carry=true} // no savings jar left: the fallback becomes one
       persist();render();break}
     case 'addc':S.categories.push({id:uid(),emoji:'🏷️',name:'新分類',bucketId:bucketById(el.dataset.b)?el.dataset.b:S.buckets[0].id});persist();render();break;
     case 'delc':S.categories=S.categories.filter(c=>c.id!==id);persist();render();break;
@@ -124,7 +126,7 @@ document.addEventListener('input',e=>{
     if(t.id==='amt'){t.value=t.value.replace(/[^0-9]/g,'');draft.amount=t.value;updateHint();return}
     if(t.id==='note'){draft.note=t.value;return}
   }
-  const ed=t.dataset.edit;if(!ed||ed==='bcarry')return;
+  const ed=t.dataset.edit;if(!ed||ed==='bcarry'||ed==='bkind')return;
   if(ed==='jname'||ed==='jcemoji'||ed==='jcname'){
     const j=Cloud.jars[t.dataset.jid];if(!j)return;
     if(ed==='jname'){j.name=t.value;saveJarMeta(t.dataset.jid,['name'])}
@@ -143,7 +145,15 @@ document.addEventListener('change',e=>{
   if(t.id==='importFile'&&t.files[0]){importData(t.files[0]);t.value='';return}
   if(t.id==='rptFile'){if(t.files&&t.files.length)rptAddFiles(t.files);t.value='';return}
   if(t.id==='lm'||t.id==='hm'){listMonth=t.value||curMonth();listCat=null;resetPie();render();return}
-  if(t.dataset.edit==='bcarry'){bucketById(t.dataset.id).carry=t.checked;persist();render();return}
+  if(t.dataset.edit==='bcarry'){const b=bucketById(t.dataset.id);if(b&&!isSave(b)){b.carry=t.checked;persist()}render();return} // spending jars only
+  if(t.dataset.edit==='bkind'){ // v43: savings jars always carry; a jar becoming a spending jar starts as 月底歸零
+    const b=bucketById(t.dataset.id);if(!b)return;
+    if(t.value==='spend'&&isPinned(b)){
+      const ex=excessBucket().id===b.id,sw=sweepBucket().id===b.id;
+      toast(`「${b.name}」是${ex&&sw?'「收入超過計畫的錢」和「月底的剩餘或不足」':ex?'「收入超過計畫的錢」':'「月底的剩餘或不足」'}放入的罐子，請先在「分配與結算」改到其他儲蓄型罐子`);
+      render();return}
+    if(t.value==='save'){b.kind='save';b.carry=true}else{b.kind='spend';b.carry=false}
+    persist();render();return}
   if(draft){
     if(t.id==='date'){draft.date=t.value;updateHint();return}
     if(t.id==='mode'){draft.mode=t.value;document.getElementById('tgtWrap').classList.toggle('hidden',t.value!=='one');updateHint();return}
@@ -168,7 +178,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.edit==='bcover'){const b=bucketById(t.dataset.id);if(b){b.coverBy=t.value&&t.value!==b.id?t.value:null;persist();render()}return}
   if(t.dataset.edit==='excessTo'||t.dataset.edit==='sweepTo'){
     const b=bucketById(t.value);if(!b)return;S[t.dataset.edit]=b.id;
-    if(b.carry===false)b.carry=true; // pinned jars always carry (the menu only lists carrying jars)
+    if(!isSave(b)){b.kind='save';b.carry=true} // pinned jars are savings jars (the menu only lists savings jars)
     persist();render();return}
   if(t.dataset.edit==='jsrc'){setJarPlan(t.dataset.jid,'src',t.value);persist();render();return}
   if(['bname','bamt','jamt','jname'].includes(t.dataset.edit))render();
