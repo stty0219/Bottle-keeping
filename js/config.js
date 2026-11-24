@@ -1,6 +1,6 @@
 // 版本號。改版時 APP_VERSION 加一，並在 js/changelog.js 的 CHANGELOG 最上方新增一筆。
 // ===== App version: change only this line when releasing (sw.js picks it up automatically) =====
-const APP_VERSION='v41';
+const APP_VERSION='v42';
 // 開發者帳號的 Firebase uid：只有這個帳號看得到「回報管理」。修改時 firestore.rules 的 isDev() 也要一起改。
 const DEV_UID='4wumuhJJLHQqQwcK4uNdwrXsrrc2';
 
