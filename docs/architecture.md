@@ -117,7 +117,7 @@ docs/                  專案文件
 | `notify.js` | 通知鈴鐺（目前版本的更新內容、v36 轉換說明、回報通知）、新版本偵測 |
 | `init.js` | 啟動流程 `init()`、匯出／還原備份、匯出 CSV |
 | `calc.js` | 計算核心：罐子類型（`isSave()`、`carries()`）、計畫分配、共用罐撥款、結轉、月底結算、超支墊付、共用罐超支平分；`migrateCover()`、`migrateKind()`、`migrateJarPlan()`、`migrateJarOwner()` |
-| `views/home.js` | `render()`、總覽頁；以及明細與總覽共用的紀錄清單 `monthItems()`、`jarSpendItems()`、`sharedExpenseItems()` |
+| `views/home.js` | `render()`、總覽頁、儲蓄目標（`goalView()`、`checkGoals()`，v44）；以及明細與總覽共用的紀錄清單 `monthItems()`、`jarSpendItems()`、`sharedExpenseItems()` |
 | `views/list.js` | 明細頁：紀錄列、月初結算、本月超支墊付、圓餅圖、搜尋 |
 | `views/settings.js` | 設定頁（分區展開狀態、支出分類分組） |
 | `summary.js` | 月結算畫面、評等、結算風格 `THEMES`、`migrateTheme()` |
@@ -193,7 +193,7 @@ flowchart TB
 
 | 欄位 | 說明 |
 |---|---|
-| `buckets[]` | 個人罐子 `{id, name, color, amt, kind, carry, coverBy}`。`amt` 是每月金額；`kind` 是類型：`'spend'` 花費型、`'save'` 儲蓄型（v43）；`carry` 表示會不會結轉：儲蓄型一律是 `true`，花費型的 `true` 表示「沒花完的錢留到下個月」，`false` 表示月底歸零（舊版裝置只看 `carry`，所以算出的金額一致）；`coverBy` 是超支時墊付的個人罐子 id（`null` 表示不墊付，不能是自己）。舊資料可能留有 `pct`（比例），已不使用 |
+| `buckets[]` | 個人罐子 `{id, name, color, amt, kind, carry, coverBy, goal, goalReachedAt}`。`goal` 是儲蓄型的目標金額（v44，數字；未設定為 `null` 或沒有這個欄位）；改成花費型時保留但不使用。`goalReachedAt` 是第一次達成目標的時間（ms），用來避免重複提示，見 [calculation-rules.md](calculation-rules.md#儲蓄目標v44)。`amt` 是每月金額；`kind` 是類型：`'spend'` 花費型、`'save'` 儲蓄型（v43）；`carry` 表示會不會結轉：儲蓄型一律是 `true`，花費型的 `true` 表示「沒花完的錢留到下個月」，`false` 表示月底歸零（舊版裝置只看 `carry`，所以算出的金額一致）；`coverBy` 是超支時墊付的個人罐子 id（`null` 表示不墊付，不能是自己）。舊資料可能留有 `pct`（比例），已不使用 |
 | `categories[]` | 個人分類 `{id, emoji, name, bucketId}`。`bucketId` 只能是個人罐子；陣列順序就是設定頁與分類面板中各組內的順序 |
 | `txns[]` | 個人紀錄，見下方「紀錄」 |
 | `allocMode` | 固定為 `'amount'`（比例模式已在 v26 移除，舊資料由 `migrateAlloc()` 轉換） |
@@ -320,6 +320,7 @@ reports/{reportId}/images/{n}      回報的圖片
 
 - **登入後連線（`cloudConnect()`）**：找出自己的帳本，沒有就把這台裝置的資料上傳成新帳本。雲端已有帳本、而這台裝置也有紀錄時，會先詢問，同意後把本機資料下載成備份檔，再改用雲端帳本。
 - **監聽（`subscribe()`）**：帳本文件與 `txns` 子集合各一個監聽器。收到帳本後執行舊資料轉換，有變動就寫回。
+- **儲蓄目標的達成判斷（`checkGoals()`，v44）**：在 `render()` 最後執行，會寫入罐子的 `goalReachedAt`。已登入時，要等登入狀態確定（`Cloud.authKnown`）、帳本與紀錄都收到（`ledgerLoaded`、`txnsLoaded`）、共用罐與其紀錄都載入後才判斷，避免只收到一半的資料時誤判「掉回目標以下」而重複提示。
 - **寫入**：設定類的變動用 `persist()`（延遲 600ms 合併寫入整份帳本設定）；紀錄用 `putTxn()`／`removeTxn()` 逐筆寫入。
 - **共用罐（`startJars()`）**：監聽自己是成員的 `jars`，以及每個罐子的 `txns`。成員關係變動時，同步調整 `jarPlan`（新罐子建立撥款設定；不再是成員時設定 `until`）。
 - **mirror（`desiredMirrors()`、`syncMirrors()`）**：每台裝置依自己的 `jarPlan` 與個人紀錄，算出應該存在於共用罐、由自己寫入的紀錄（`contrib`、`cover`、`m_` 開頭的 `in`／`withdraw`），和共用罐中實際的紀錄比對後新增、更新或刪除。資料有變動時延遲 1.2 秒執行。

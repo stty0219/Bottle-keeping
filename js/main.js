@@ -126,7 +126,7 @@ document.addEventListener('input',e=>{
     if(t.id==='amt'){t.value=t.value.replace(/[^0-9]/g,'');draft.amount=t.value;updateHint();return}
     if(t.id==='note'){draft.note=t.value;return}
   }
-  const ed=t.dataset.edit;if(!ed||ed==='bcarry'||ed==='bkind')return;
+  const ed=t.dataset.edit;if(!ed||ed==='bcarry'||ed==='bkind'||ed==='bgoal')return; // bgoal applies on change, not while typing
   if(ed==='jname'||ed==='jcemoji'||ed==='jcname'){
     const j=Cloud.jars[t.dataset.jid];if(!j)return;
     if(ed==='jname'){j.name=t.value;saveJarMeta(t.dataset.jid,['name'])}
@@ -146,6 +146,11 @@ document.addEventListener('change',e=>{
   if(t.id==='rptFile'){if(t.files&&t.files.length)rptAddFiles(t.files);t.value='';return}
   if(t.id==='lm'||t.id==='hm'){listMonth=t.value||curMonth();listCat=null;resetPie();render();return}
   if(t.dataset.edit==='bcarry'){const b=bucketById(t.dataset.id);if(b&&!isSave(b)){b.carry=t.checked;persist()}render();return} // spending jars only
+  if(t.dataset.edit==='bgoal'){ // v44: empty or 0 = no goal; a new goal is judged afresh (render() → checkGoals())
+    const b=bucketById(t.dataset.id);if(!b)return;
+    const v=Math.max(0,parseInt(t.value)||0)||null;
+    if(v!==(+b.goal>0?+b.goal:null)){b.goal=v;b.goalReachedAt=null;persist()}
+    render();return}
   if(t.dataset.edit==='bkind'){ // v43: savings jars always carry; a jar becoming a spending jar starts as 月底歸零
     const b=bucketById(t.dataset.id);if(!b)return;
     if(t.value==='spend'&&isPinned(b)){

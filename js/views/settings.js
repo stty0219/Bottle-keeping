@@ -74,7 +74,8 @@ function settingsView(){
   const kindRow=b=>{const save=isSave(b);
     return `<label class="carry kind">類型<select data-edit="bkind" data-id="${b.id}" aria-label="${esc(b.name)}的類型">
       <option value="spend" ${save?'':'selected'}>花費</option><option value="save" ${save?'selected':''}>儲蓄</option></select>${save&&isPinned(b)?`<span class="kind-why">${pinWhy(b)}</span>`:''}</label>
-    ${save?'':`<label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${b.carry===true?'checked':''}>沒花完的錢留到下個月</label>`}`};
+    ${save?`<label class="carry goal">目標金額<input type="number" inputmode="numeric" min="0" step="1000" placeholder="選填" value="${+b.goal>0?+b.goal:''}" data-edit="bgoal" data-id="${b.id}" aria-label="${esc(b.name)}的目標金額（選填）"></label>`
+      :`<label class="carry"><input type="checkbox" data-edit="bcarry" data-id="${b.id}" ${b.carry===true?'checked':''}>沒花完的錢留到下個月</label>`}`};
   const coverOpts=b=>`<option value="">不墊付</option>`+S.buckets.filter(o=>o.id!==b.id).map(o=>`<option value="${o.id}" ${o.id===b.coverBy?'selected':''}>${esc(o.name)}</option>`).join('');
   const bl=S.buckets.map(b=>`<div class="set-item amt-mode brow" data-id="${b.id}">
     <span class="dh" data-drag="bucket" aria-label="按住拖拉調整順序" title="按住拖拉調整順序">≡</span>

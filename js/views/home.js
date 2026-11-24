@@ -5,6 +5,7 @@ function render(){
   const v=document.getElementById('view');
   v.innerHTML=tab==='home'?homeView():tab==='list'?listView():settingsView();
   if(tab==='list')highlightTerms(document.getElementById('listResults'));
+  checkGoals();
 }
 
 function monthNav(){
@@ -46,16 +47,47 @@ function saveSub(v){
   const x=[];if(v.xi)x.push(`轉入 ${money(v.xi)}`);if(v.xo)x.push(`轉出 ${money(v.xo)}`);
   return x.length?'本月'+x.join('・'):'累積中';
 }
+/* v44 savings goal (b.goal, savings jars only; kept but unused while the jar is a spending jar):
+   level = bal ÷ goal (0–100%, 0 when bal < 0); reached when bal ≥ goal. Not reached never shows 100% (rounding). */
+const goalOf=b=>isSave(b)&&+b.goal>0?+b.goal:0;
+function goalView(b,bal){
+  const goal=goalOf(b);if(!goal)return null;
+  const reached=bal>=goal,ratio=reached?1:clamp01(bal/goal),pct=reached?100:Math.min(99,Math.round(ratio*100));
+  return {goal,reached,ratio,pct,empty:false,left:goal-bal,label:reached?'🎉 100%':`🎯 ${pct}%`};
+}
+// 「累積 $T ／ 目標 $G，還差 $D」 or 「累積 $T ／ 🎉 已達成目標 $G」
+const goalLine=(g,bal)=>`累積 ${money(bal)} ／ ${g.reached?`🎉 已達成目標 ${money(g.goal)}`:`目標 ${money(g.goal)}，還差 ${money(g.left)}`}`;
+/* v44: tell the user once when a savings jar reaches its goal. Judged on the current month (curMonth()), whatever month
+   is on screen. b.goalReachedAt (synced with the ledger) remembers it, so another device or a reload doesn't tell again;
+   dropping below the goal clears it, so reaching it again tells again. Runs at the end of render(). */
+function goalsSettled(){ // wait until the ledger, its records and shared jars are all in, or a half-loaded state looks like a drop
+  if(!cloudConfigured()||!Cloud.ready)return true;
+  if(!Cloud.authKnown)return false;
+  if(!Cloud.user)return true;
+  if(!cloudOn()||!Cloud.ledgerLoaded||!Cloud.txnsLoaded||!Cloud.jarsLoaded)return false;
+  return Object.keys(Cloud.jars).every(id=>Cloud.jarLoaded[id]);
+}
+function checkGoals(){
+  const gs=S.buckets.filter(goalOf);if(!gs.length||!goalsSettled())return;
+  const st=stats(null,curMonth()),hit=[];let changed=false;
+  for(const b of gs){const s=st[b.id];if(!s)continue;
+    if(s.bal>=goalOf(b)){if(!b.goalReachedAt){b.goalReachedAt=Date.now();changed=true;hit.push(`${b.name}已達成目標 ${money(goalOf(b))}！`)}}
+    else if(b.goalReachedAt){b.goalReachedAt=null;changed=true}}
+  if(changed)persist();
+  if(hit.length)goalToast(hit.join(''));
+}
+// after the current render; waits for an undo toast (e.g. 已刪除・復原) to finish instead of replacing it
+function goalToast(m){setTimeout(()=>{if(undoFn){setTimeout(()=>goalToast(m),4600);return}toast(m)},0)}
 // v43 spending jar: transfers count in the month; level = bal ÷ (max(0,open) + this month's in)
 const spendLevel=s=>shareLevel(s.bal,Math.max(0,s.open)+s.monthIn);
 // 「含美樂蒂 $1,500」：撥給共用罐的錢（每月撥款＋超支墊付），算這個罐子的支出
 function jarPartsText(s){return (s.jarParts||[]).filter(p=>p.amount).map(p=>`${esc(jarName(sjId(p.id)))} ${money(p.amount)}`).join('・')}
-// lv = {ratio, empty} from level() / saveView() / accumView()
+// lv = {ratio, empty, label?} from level() / saveView() / accumView() / goalView()
 function jarCol(id,name,color,s,sub,shared,bad,lv){
-  const ratio=lv.ratio;
-  return `<div class="jarcol" role="button" tabindex="0" data-action="jump" data-bucket="${id}" aria-label="${esc(name)}，月底餘額 ${money(s.bal)}，${sub}">
+  const ratio=lv.ratio,goal=lv.goal?`，${lv.reached?'已達成':'目標'} ${money(lv.goal)}`:'';
+  return `<div class="jarcol" role="button" tabindex="0" data-action="jump" data-bucket="${id}" aria-label="${esc(name)}，月底餘額 ${money(s.bal)}${goal}，${sub}">
     <div class="jar ${s.bal<0||s.over?'neg':''}"><div class="fill" style="height:${(ratio*100).toFixed(1)}%;background:${color}"></div>
-    <div class="jarpct num" ${ratio>0.12?`style="color:${textOn(color)}"`:''}>${lv.empty?'空':Math.round(ratio*100)+'%'}</div></div>
+    <div class="jarpct num" ${ratio>0.12?`style="color:${textOn(color)}"`:''}>${lv.label||(lv.empty?'空':Math.round(ratio*100)+'%')}</div></div>
     <div class="jarname">${esc(name)}${shared?'<span class="pill">共用</span>':''}</div>
     <div class="jarbal num ${s.bal<0?'neg':''}">${money(s.bal)}</div>
     <div class="jarsub ${bad?'bad':''}">${sub}</div></div>`;
@@ -105,9 +137,10 @@ function monthRow(name,color,s,shared,jid,b){
     if(v.inn)parts.push(`本月存入 ${money(v.inn)}`);if(v.cov)parts.push(`墊付 ${money(v.cov)}`);
     if(v.spent)parts.push(`支出 ${money(v.spent)}${jt?`（含${jt}）`:''}`);
     const x=[];if(v.xi)x.push(`轉入 ${money(v.xi)}`);if(v.xo)x.push(`轉出 ${money(v.xo)}`);
-    const tot=`累積 ${money(s.bal)}${x.length?'・本月'+x.join('・'):''}`;
+    const g=goalView(b,s.bal); // v44: with a goal, line 2 shows the goal instead of this month's transfers
+    const tot=g?goalLine(g,s.bal):`累積 ${money(s.bal)}${x.length?'・本月'+x.join('・'):''}`;
     const lab=v.active?`${parts.join('・')} ／ ${v.net<0?`<span class="neg">${netText(v.net)}</span>`:netText(v.net)}${overLine(s)}<br><span class="note">${tot}</span>`:tot+overLine(s);
-    return mrowHtml(name,color,false,lab,v.ratio*100);
+    return mrowHtml(name,color,false,lab,(g||v).ratio*100);
   }
   // spending jar: transfers count in the month; spent includes the money put into shared jars;
   // covering another personal jar uses this jar's money too
@@ -166,9 +199,9 @@ function homeView(){
       if(a)return jarCol(id,j.name,j.color,s,accumSub(a),true,false,a); // v41: no contribution this month
       const m=monthShare(s);return jarCol(id,j.name,j.color,s,leftSub(m.left),true,m.left<0,shareLevel(m.left,m.in))}
     const b=bucketById(id),s=st[b.id];
-    if(isSave(b)){const v=saveView(s); // v43 savings jar; covered: own overspending in red first
-      if(s.over)return jarCol(b.id,b.name,b.color,s,`超支 ${money(s.over)}`,false,true,v);
-      return jarCol(b.id,b.name,b.color,s,saveSub(v),false,v.active&&v.net<0,v)}
+    if(isSave(b)){const v=saveView(s),lv=goalView(b,s.bal)||v; // v43 savings jar (v44: level shows the goal if set); covered: own overspending in red first
+      if(s.over)return jarCol(b.id,b.name,b.color,s,`超支 ${money(s.over)}`,false,true,lv);
+      return jarCol(b.id,b.name,b.color,s,saveSub(v),false,v.active&&v.net<0,lv)}
     // spending jar: 留到下個月 shows 可用 $X (what is in the jar), otherwise 每月歸零
     return jarCol(b.id,b.name,b.color,s,s.short?`超支 ${money(s.short)}`:carries(b)?`可用 ${money(s.bal)}`:'每月歸零',false,!!s.short,spendLevel(s))}).join('');
   const sjars='';
