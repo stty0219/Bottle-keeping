@@ -193,25 +193,33 @@ function rptFillImages(id){
 }
 const rptIssueLink=n=>`<a href="${RPT_ISSUE_URL}${+n}" target="_blank" rel="noopener">#${+n}</a>`;
 
-/* ---------- 我的回報：詳細內容（底部表單） ---------- */
+/* ---------- 詳細內容（我的回報、回報管理共用）：依閱讀順序 標頭 → 內容 → 圖片 → 處理進度 → 開發者回覆 ---------- */
+function rptHeadHtml(r){
+  return `<div class="rhead">${rptTypeTag(r.type)}${r.area?`<span class="note">${esc(r.area)}</span>`:''}${rptStTag(r.status)}<span class="note rwhen">${rptDate(r.createdAt,true)}</span></div>`;
+}
+const rptBodyHtml=r=>`<div class="rtext">${esc(r.text)}</div>${rptImgBox(r)}`;
+// 狀態標籤已在標頭，這裡只寫說明，以及有填的 issue、修正版本
 function rptProgressHtml(r){
   const st=r.status;
   const line=st==='doing'?(r.issue?`已建立 issue ${rptIssueLink(r.issue)}`:'開發者正在處理')
     :st==='done'?(r.fixedIn?`已在 ${esc(r.fixedIn)} 解決`:'已解決')
     :st==='wontfix'?'這則回報不會處理'
     :st==='read'?'開發者已經看過':'開發者還沒看過';
-  let h=`<div class="rprog"><div class="rprog-h">${rptStTag(st)}<span>${line}</span></div>`;
+  let h=`<section class="rsec"><h3 class="rsec-h">處理進度</h3><div class="rprog"><div class="rprog-h">${line}</div>`;
   if(r.issue&&st!=='doing')h+=`<div class="note">Issue：${rptIssueLink(r.issue)}</div>`;
   if(r.fixedIn&&st!=='done')h+=`<div class="note">修正版本：${esc(r.fixedIn)}</div>`;
-  if(r.reply)h+=`<div class="rreply"><div class="note">${st==='wontfix'?'原因':'開發者回覆'}</div><div class="rtext">${esc(r.reply)}</div></div>`;
-  return h+'</div>';
+  return h+'</div></section>';
 }
+// 最下方，沒有回覆時不顯示
+function rptReplyHtml(r){
+  return r.reply?`<section class="rsec rsplit"><h3 class="rsec-h">開發者回覆</h3><div class="rtext rreply">${esc(r.reply)}</div></section>`:'';
+}
+
+/* ---------- 我的回報：詳細內容（底部表單） ---------- */
 function openRptView(id){
   const r=rptById(id);if(!r)return;
   openSheet(`<div class="ntop"><b>我的回報</b><button class="nclr" data-action="close" aria-label="關閉">✕</button></div>
-    <div class="rhead">${rptTypeTag(r.type)}${r.area?`<span class="note">${esc(r.area)}</span>`:''}<span class="note rwhen">${rptDate(r.createdAt,true)}</span></div>
-    ${rptProgressHtml(r)}
-    <div class="rtext">${esc(r.text)}</div>${rptImgBox(r)}`);
+    ${rptHeadHtml(r)}${rptBodyHtml(r)}${rptProgressHtml(r)}${rptReplyHtml(r)}`);
   if(r.imageCount)rptFillImages(id);
   if(rptHasNews(r)){rptMarkSeen([id]);updateBell();renderIfSettings()}
 }
@@ -236,14 +244,13 @@ function rptDevDetailHtml(id){
       ${diag&&diag.length?`<ol class="rerr">${diag.slice().reverse().map(x=>`<li><span class="note">${rptDate(x.t,true)}${x.src?`・${esc(x.src)}`:''}</span><span class="rmono">${esc(x.m)}</span></li>`).join('')}</ol>`:'<p class="note">沒有錯誤紀錄</p>'}`;
   const opt=Object.entries(RPT_STATUS).map(([k,l])=>`<option value="${k}" ${k===r.status?'selected':''}>${l}</option>`).join('');
   return `${devTop(['reports','回報管理'])}<h1>${RPT_TYPES[r.type]||'其他'}回報</h1>
-    <div class="rinfo"><span>回報者</span><span>${esc(r.name||'')}${r.name&&r.email?'・':''}${esc(r.email||'')}</span>
-      <span>類別</span><span>${RPT_TYPES[r.type]||esc(r.type)}</span>
-      <span>相關功能</span><span>${esc(r.area||'未指定')}</span>
-      <span>時間</span><span>${rptDate(r.createdAt,true)}</span>
+    ${rptHeadHtml(r)}
+    <div class="rinfo rwho2"><span>回報者</span><span>${esc(r.name||'')}${r.name&&r.email?'・':''}${esc(r.email||'')}</span>
       <span>App 版本</span><span>${esc(r.appVersion||'')}</span></div>
-    <div class="rtext" style="margin-top:12px">${esc(r.text)}</div>${rptImgBox(r)}
+    ${rptBodyHtml(r)}
     <details class="rtech"><summary>技術資訊</summary>${tech}</details>
-    <h3 class="rsub">處理</h3>
+    ${rptProgressHtml(r)}
+    <section class="rsec rsplit"><h3 class="rsec-h">處理</h3>
     <div class="rform">
       <label class="f">狀態<select id="rst">${opt}</select></label>
       <label class="f">GitHub issue 編號${r.issue?`<span class="rlink">${rptIssueLink(r.issue)}</span>`:''}<input type="number" inputmode="numeric" min="1" step="1" id="rissue" value="${r.issue||''}" placeholder="例如 21"></label>
@@ -251,7 +258,7 @@ function rptDevDetailHtml(id){
       <label class="f">回覆（不處理時說明原因）<textarea class="rta" id="rreply" rows="4" maxlength="3000">${esc(r.reply||'')}</textarea></label>
       <button class="primary" style="margin-top:0" data-action="rptsave" data-id="${r.id}">儲存</button>
       <button class="ghost danger" data-action="rptdel" data-id="${r.id}">刪除這則回報</button>
-    </div>`;
+    </div></section>`;
 }
 // 打開回報；未讀的自動改為已讀
 function rptOpenDev(id){

@@ -350,5 +350,6 @@ sequenceDiagram
   - 登入時 `startReports()`、登出時 `stopReports()`。這兩個寫在 `onAuthStateChanged`，不在 `cloudStop()`，因為 `subscribe()` 會先呼叫 `cloudStop()`。
 - **回報管理**只看登入帳號是否為開發者（`isDev()`：uid 等於 `DEV_UID`），**不看**開發者模式（任何人都能開啟開發者模式）。真正的權限由 `firestore.rules` 的 `isDev()` 控制，兩處的 uid 必須一致（見 [deployment.md](deployment.md#5-開發者帳號)）。
 - 開發者打開未讀的回報時，自動改為已讀。
+- **詳細頁面的排列**（我的回報與回報管理共用 `rptHeadHtml`、`rptBodyHtml`、`rptProgressHtml`）：標頭（類別、相關功能、狀態、送出日期）→ 內容 → 圖片 → 處理進度 → 最下方的「開發者回覆」（`rptReplyHtml`，沒有回覆時不顯示）。回報管理在圖片和處理進度之間多一個預設收合的「技術資訊」，最下方則是「處理」區塊（狀態、issue、修正版本、回覆輸入框），開發者在這裡修改已送出的回覆。
 - **回報者的新進度**：狀態（未讀與已讀都視為沒有進度）＋ issue ＋ 修正版本 ＋ 回覆組成的字串，和 `fenguan-rptseen` 中記的不同，就算有新進度。這台裝置第一次載入時，現有的進度全部當作已看過。開發者本人的回報不顯示新進度。
 - 回報不包含任何記帳資料或金額；一般畫面不顯示錯誤紀錄。

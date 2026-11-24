@@ -43,9 +43,13 @@
 .rhead .note{font-size:13px}
 .rwhen{margin-left:auto}
 .rtext{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;font-size:15px;line-height:1.6}
-.rprog{display:grid;gap:6px;margin-bottom:12px}
-.rprog-h{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
-.rreply{display:grid;gap:4px;margin-top:4px}
+.rsec{margin-top:18px}
+.rsec-h{font-size:14px;font-weight:700;margin:0 0 8px}
+.rsplit{margin-top:22px;padding-top:18px;border-top:1.5px solid var(--line)}
+.rprog{display:grid;gap:6px}
+.rprog-h{font-size:14px;font-weight:600;word-break:break-word}
+.rreply{background:var(--chip);border-color:transparent}
+.rwho2{margin-bottom:12px}
 .rprog a,.rinfo a,.rlink a{color:var(--ink);font-weight:700}
 .rimgs{display:grid;gap:8px;margin-top:10px}
 .rimgs img{width:100%;height:auto;border-radius:12px;border:1px solid var(--line);display:block}
@@ -58,7 +62,6 @@
 .rtech[open]{padding-bottom:14px}
 .rerr{margin:6px 0 0;padding-left:20px;display:grid;gap:8px}
 .rerr li{display:grid;gap:2px}
-.rsub{font-size:15px;margin:24px 0 10px}
 .rlink{margin-left:8px;font-size:13px}
 
 /* 鈴鐺面板 */
