@@ -45,10 +45,29 @@ function swipeDelete(ref){
     removeTxn(id);render();
     toast('已刪除',()=>{putTxn(copy);render();toast('已復原')});
   }else{
-    const [,jid,id]=ref.split(':');const t=(Cloud.jarTxns[jid]||[]).find(x=>x.id===id);if(!t||!cloudOn())return;
+    const [,jid,id]=ref.split(':');delShared(jid,id,false);
+  }
+}
+/* delete a shared expense (fromSheet: the 刪除這筆 button in the edit sheet, which always asks first).
+   v45: any member can delete one; someone else's asks first and is only really deleted after the undo time */
+function delShared(jid,id,fromSheet){
+  const t=(Cloud.jarTxns[jid]||[]).find(x=>x.id===id);if(!t||!cloudOn())return;
+  const other=t.by!==myUid();
+  if((other||fromSheet)&&!confirm(other?`這筆是 ${t.byName||'成員'} 記錄的，確定刪除？`:'確定刪除這筆紀錄？')){if(!fromSheet)render();return}
+  if(fromSheet)closeSheet();
+  Cloud.jarTxns[jid]=Cloud.jarTxns[jid].filter(x=>x.id!==id);render();
+  if(other){
+    const k=jid+'/'+id;
+    jarPendingDel[k]={jid,id,timer:setTimeout(()=>flushJarDel(k),5000)};
+    toast('已刪除',()=>{
+      const p=jarPendingDel[k];if(!p){toast('已經刪除，無法復原');return}
+      clearTimeout(p.timer);delete jarPendingDel[k];
+      const l=Cloud.jarTxns[jid];if(l&&!l.some(x=>x.id===id))l.push(t);
+      render();toast('已復原');
+    });
+  }else{
     const {id:_i,jid:_j,...data}=t;
     jarTxnRef(jid,id).delete().catch(()=>toast('刪除失敗'));
-    Cloud.jarTxns[jid]=Cloud.jarTxns[jid].filter(x=>x.id!==id);render();
     toast('已刪除',()=>{jarTxnRef(jid,id).set(data).then(()=>toast('已復原')).catch(()=>toast('復原失敗'))});
   }
 }

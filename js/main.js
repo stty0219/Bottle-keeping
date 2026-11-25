@@ -73,7 +73,7 @@ document.addEventListener('click',e=>{
     case 'emoset':applyEmoji(el.dataset.e);break;
     case 'emocustom':{const v=lastEmoji(document.getElementById('emocustom').value);if(!v){toast('請輸入一個 emoji');break}applyEmoji(v);break}
     case 'undo':{const f=undoFn;undoFn=null;document.getElementById('toast').classList.remove('show','act');if(f)f();break}
-    case 'delstx':if(!confirm('確定刪除這筆紀錄？'))break;jarTxnRef(el.dataset.jid,id).delete().catch(()=>toast('刪除失敗'));closeSheet();render();toast('已刪除');break;
+    case 'delstx':delShared(el.dataset.jid,id,true);break;
     case 'newjar':createJar();break;
     case 'invite':inviteTo(el.dataset.jid);break;
     case 'uninvite':cancelInvite(id);break;

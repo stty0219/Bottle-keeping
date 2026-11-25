@@ -111,7 +111,7 @@ docs/                  專案文件
 | `changelog.js` | `CHANGELOG`：所有版本的更新紀錄（由新到舊）；`changelogOk()` 檢查第一筆是否等於 `APP_VERSION` |
 | `state.js` | 共用工具（`uid`、`today`、`esc`、`money`）、預設資料 `defaults()`、全域狀態 `S`、明細頁的篩選狀態、本機儲存 |
 | `cloud.js` | Firebase 初始化、登入狀態監聽、帳本與紀錄的同步、寫入流程（`persist`、`putTxn`、`removeTxn`、`replaceAll`）、`safeRender()` |
-| `shared-jars.js` | 共用罐：監聽罐子與紀錄、邀請、成員管理、撥款與墊付紀錄的同步（mirror）、`migrateSharedCats()` |
+| `shared-jars.js` | 共用罐：監聽罐子與紀錄、邀請、成員管理、撥款與墊付紀錄的同步（mirror）、共用支出的修改資訊 `editNote()`、`byLine()`（v45）、`migrateSharedCats()` |
 | `account.js` | 登入、註冊、重設密碼、登出 |
 | `setup.js` | 舊資料轉換 `migrate()`、`migrateAlloc()`；防止雙指縮放；動態效果設定 |
 | `notify.js` | 通知鈴鐺（目前版本的更新內容、v36 轉換說明、回報通知）、新版本偵測 |
@@ -126,7 +126,7 @@ docs/                  專案文件
 | `sheet.js` | 底部表單的開關、下拉收合、背景鎖定捲動、emoji 面板 |
 | `color.js` | 罐子顏色面板（推薦色、我的顏色）、依底色決定文字顏色、`migrateColors()` |
 | `entry.js` | 記一筆／編輯：計算機鍵盤、分類列與分類面板、存檔 |
-| `ui.js` | 提示訊息（含復原）、左滑刪除 |
+| `ui.js` | 提示訊息（含復原）、左滑刪除、刪除共用支出 `delShared()`（v45） |
 | `reorder.js` | 拖拉排序：總覽長按罐子、設定頁罐子與分類（組內）的 ≡ 把手 |
 | `main.js` | 事件分派（click／input／change），最後呼叫 `init()` 啟動 |
 
@@ -263,17 +263,34 @@ reports/{reportId}/images/{n}      回報的圖片
 
 **`ledgers/{ledgerId}`**：`name`、`owner`、`members[]`（只有本人）、`createdAt`、`updatedAt`，以及 `S` 中會同步的欄位（`buckets`、`categories`、`allocMode`、`excessTo`、`sweepTo`、`remainderId`、`jarPlan`、`shelfOrder`、`gradeRules`、`sumTheme`、`themeText`、`myColors`、`jarOwnerV36`、`jarOwnerNote`、`kindV43`、`kindNote`、`gradeComments`）。
 
-**`jars/{jarId}`**：`owner`、`members[]`、`memberInfo{uid: {name, email}}`、`name`、`color`、`categories[]`（共用分類 `{id, emoji, name}`，陣列順序即顯示順序，在設定頁「支出分類」管理）、`createdAt`、`updatedAt`。
+**`jars/{jarId}`**：`owner`、`members[]`、`memberInfo{uid: {name, email}}`、`name`、`color`、`categories[]`（共用分類 `{id, emoji, name}`，陣列順序即顯示順序，在設定頁「支出分類」管理）、`createdAt`、`updatedAt`。v45 起所有成員都能修改 `name`、`color`、`categories`；`owner`、`members`、`memberInfo` 依原本的規則（邀請、退出、移除成員）。
 
 **`jars/{jarId}/txns/{id}`**：共同欄位 `kind`、`amount`、`date`、`note`、`by`（記錄者 uid）、`byName`。
 
 | `kind` | 說明 | 寫入者與文件 id |
 |---|---|---|
-| `expense` | 共用支出；另有 `emoji`、`catName`、`catKey`、`split`（記錄當下的成員人數）、`ts` | 記錄者，任意 id |
+| `expense` | 共用支出；另有 `emoji`、`catName`、`catKey`、`split`（記錄當下的成員人數）、`ts`，被修改過時另有修改紀錄（見下方） | 記錄者新增，任意 id；v45 起任何成員都能修改、刪除 |
 | `contrib` | 每月撥款；`src`、`srcId` = 所屬罐子的名稱與 id | 各成員自己的裝置，`contrib_{uid}_{月份}` |
 | `cover` | 共用罐超支時自己的份額；`src`、`srcId` = 墊付的罐子 | 各成員自己的裝置，`cover_{uid}_{月份}` |
 | `in` | 舊的轉入，或「全部放入一罐」放進共用罐的收入 | 由個人紀錄 mirror，`m_{個人紀錄 id}` |
 | `withdraw` | 舊的轉出 | 由個人紀錄 mirror，`m_{個人紀錄 id}` |
+
+`expense` 以外的紀錄都由成員自己的裝置自動寫入，只有本人能修改、刪除；其他成員點開時只顯示說明。
+
+**共用支出的修改紀錄（v45，`saveDraft()`）**：只保留最後一次修改。
+
+| 欄位 | 說明 |
+|---|---|
+| `editedBy`、`editedByName` | 最後修改的人 |
+| `editedAt` | 最後修改的時間（ms） |
+| `editedFields[]` | 這次改了哪些欄位：`amount` 金額、`cat` 分類、`date` 日期、`note` 備註 |
+| `prevAmount` | 這次有改金額時，修改前的金額；沒改金額就不存這個欄位 |
+
+- 編輯時 `by`、`byName`、`ts`、`split` 維持原值；分類沒變時，保留原本存下的 `emoji`、`catName`。
+- 儲存時四個欄位都沒變，不寫入，也不更新修改紀錄。
+- 別人記的支出只能改成同一個共用罐的分類（`lockedJar()`）；自己的支出可以改到其他共用罐或個人罐子（刪除舊紀錄、新增一筆）。
+- 顯示由 `editNote()`、`byLine()`（`shared-jars.js`）產生，例如「對方記錄・你在 11/20 修改金額（原本 $2,000）、備註」，用在紀錄列的副標題與編輯畫面。
+- **刪除別人的支出**（`delShared()`，`ui.js`）：先確認「這筆是○○記錄的」，從畫面隱藏（`jarPendingDel`），5 秒後才真的刪除，期間可以復原；App 切到背景、登出時立刻送出刪除。因為安全規則不允許用別人的名義新增，所以不能像自己的紀錄一樣「刪除後重新寫回」。
 
 **`invites/{email}_{jarId}`**：`jid`、`owner`（邀請者 uid）、`email`（受邀者，小寫）、`jarName`、`fromName`、`createdAt`。
 

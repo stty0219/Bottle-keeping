@@ -10,8 +10,31 @@ function nameOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return (j?j.name:(
 function jarName(jid){const j=Cloud.jars[jid];return j?j.name:((S.jarPlan||{})[jid]||{}).name||'共用罐'} // without the （共用） suffix
 function colorOf(id){if(isSJ(id)){const j=Cloud.jars[sjId(id)];return j?j.color:'#999'}const b=bucketById(id);return b?b.color:'#999'}
 function memberName(j,uid){const m=(j.memberInfo||{})[uid];return m?(m.name||m.email):'成員'}
+const whoName=(u,name)=>u===myUid()?'你':(name||'成員');
+// v45: a shared expense keeps only its last edit: 「你在 11/20 修改金額（原本 $2,000）、備註」
+const EDIT_LABEL={amount:'金額',cat:'分類',date:'日期',note:'備註'};
+function editNote(t){
+  if(!t||!t.editedBy||!t.editedAt)return '';
+  const d=new Date(t.editedAt),y=d.getFullYear()!==new Date().getFullYear()?d.getFullYear()+'/':'';
+  const f=(t.editedFields||[]).filter(k=>EDIT_LABEL[k]).map(k=>k==='amount'&&t.prevAmount!=null?`金額（原本 ${money(t.prevAmount)}）`:EDIT_LABEL[k]);
+  return `${whoName(t.editedBy,t.editedByName)}在 ${y}${d.getMonth()+1}/${d.getDate()} 修改${f.join('、')}`;
+}
+const byLine=t=>`${whoName(t.by,t.byName)}記錄${editNote(t)?'・'+editNote(t):''}`;
+
+/* v45: deleting someone else's shared expense waits until the undo time is over
+   (re-creating it as someone else would be refused by the rules); until then it is hidden here */
+const jarPendingDel={};
+function flushJarDel(k){
+  const p=jarPendingDel[k];if(!p)return;
+  clearTimeout(p.timer);delete jarPendingDel[k];
+  jarTxnRef(p.jid,p.id).delete().catch(()=>toast('刪除失敗'));
+}
+function flushJarDels(){Object.keys(jarPendingDel).forEach(flushJarDel)}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushJarDels()});
+window.addEventListener('pagehide',flushJarDels);
 
 function stopJars(){
+  flushJarDels();
   if(Cloud.jarsUnsub){try{Cloud.jarsUnsub()}catch(e){}}Cloud.jarsUnsub=null;
   for(const id in Cloud.jarUnsubs){try{Cloud.jarUnsubs[id]()}catch(e){}}
   Cloud.inviteUnsubs.forEach(f=>{try{f()}catch(e){}});
@@ -46,7 +69,7 @@ function startJars(){
 }
 function watchJarTxns(jid){
   Cloud.jarUnsubs[jid]=Cloud.fs.collection('jars').doc(jid).collection('txns').onSnapshot(qs=>{
-    Cloud.jarTxns[jid]=qs.docs.map(d=>Object.assign({},d.data(),{id:d.id,jid}));
+    Cloud.jarTxns[jid]=qs.docs.filter(d=>!jarPendingDel[jid+'/'+d.id]).map(d=>Object.assign({},d.data(),{id:d.id,jid}));
     Cloud.jarLoaded[jid]=true;safeRender();scheduleMirror();
   },()=>{});
 }
@@ -202,12 +225,12 @@ function sharedHtml(){
   if(!cloudOn())return `<p class="note">登入帳號後，就可以建立共用罐子，和其他人一起投錢、記帳。</p>`;
   const me=myUid();
   const cards=jarsList().map(j=>{
-    const owner=j.owner===me,jp=(S.jarPlan||{})[j.id]||{};
+    const owner=j.owner===me,jp=(S.jarPlan||{})[j.id]||{}; // v45: every member can change the name and color
     const e=jarEff(jp,curMonth())||{amt:0,src:defaultSrc()},src=bucketById(e.src)?e.src:defaultSrc(),sname=esc(nameOf(src));
     const n=(j.members||[]).length;
     return `<div class="jarcard">
-      <div class="jhead"><button class="swatch" style="background:${j.color}" ${owner?`data-action="colorpick" data-jid="${j.id}"`:'disabled'} aria-label="換顏色"></button>
-        <input type="text" value="${esc(j.name)}" data-edit="jname" data-jid="${j.id}" ${owner?'':'disabled'} aria-label="共用罐名稱">
+      <div class="jhead"><button class="swatch" style="background:${j.color}" data-action="colorpick" data-jid="${j.id}" aria-label="換顏色"></button>
+        <input type="text" value="${esc(j.name)}" data-edit="jname" data-jid="${j.id}" aria-label="共用罐名稱">
         <span class="jtag"><span class="pill">共用</span><span class="jn">${n} 人</span></span></div>
       <label class="jline"><span>這個共用罐屬於我的</span><select data-edit="jsrc" data-jid="${j.id}" aria-label="這個共用罐屬於我的哪個罐子">${S.buckets.map(b=>`<option value="${b.id}" ${b.id===src?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
       <label class="jline"><span>每月撥款</span><input type="number" inputmode="numeric" min="0" step="100" value="${+e.amt||0}" data-edit="jamt" data-jid="${j.id}" aria-label="每月撥款"></label>
