@@ -89,11 +89,12 @@ function sharedRow(t,noSwipe,inAll){
   else{ic='🔁';t1='從共用罐轉出'}
   const who=t.by===me?'你':(t.byName||'成員');
   const extra=((t.kind==='in'||t.kind==='contrib'||t.kind==='cover')&&t.src?'從'+esc(t.src)+'・':'')+(t.kind==='withdraw'&&t.src?'到'+esc(t.src)+'・':'')+(t.note&&t.kind!=='in'?esc(t.note)+'・':'');
-  const canDel=!noSwipe&&t.by===me&&(t.kind==='expense'||((t.id||'').startsWith('m_')&&S.txns.some(x=>x.id===t.id.slice(2))));
+  // v45: any member can delete a shared expense; mirrored records only by their own writer
+  const canDel=!noSwipe&&(t.kind==='expense'||(t.by===me&&(t.id||'').startsWith('m_')&&S.txns.some(x=>x.id===t.id.slice(2))));
   const ref=t.kind==='expense'?'s:'+t.jid+':'+t.id:'p:'+(t.id||'').slice(2);
   const t2=inAll&&t.kind==='expense'
-    ?`${esc(j.name||'共用罐')}・${esc(who)}記錄${t.note?'｜'+esc(t.note):''}`
-    :`${esc(j.name||'共用罐')}（共用）・${extra}${esc(who)}${t.kind==='expense'?'・你的份額 '+money(myShare(t)):''}`;
+    ?`${esc(j.name||'共用罐')}・${esc(byLine(t))}${t.note?'｜'+esc(t.note):''}`
+    :`${esc(j.name||'共用罐')}（共用）・${extra}${t.kind==='expense'?esc(byLine(t))+'・你的份額 '+money(myShare(t)):esc(who)}`;
   return `<li${canDel?` class="swipe"`:''}>${canDel?delAct(ref):''}<button class="tx" data-action="stx" data-jid="${t.jid}" data-id="${esc(t.id)}"><span class="ic">${ic}</span><span class="mid"><div class="t1">${esc(t1)}</div>
     <div class="t2"><span class="dot" style="background:${j.color||'#999'}"></span>${t2}</div></span><span class="amt num ${cls}">${sign}${money(t.amount)}</span></button></li>`;
 }

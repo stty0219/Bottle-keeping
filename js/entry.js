@@ -81,8 +81,11 @@ function pressKey(k){
 function catOptions(){
   const list=S.categories.filter(c=>!isSJ(c.bucketId)||Cloud.jars[sjId(c.bucketId)]).map(c=>({key:c.id,emoji:c.emoji,name:c.name,color:colorOf(c.bucketId),group:isSJ(c.bucketId)?c.bucketId:c.bucketId}));
   for(const j of jarsList())for(const c of (j.categories||[]))list.push({key:'jc:'+j.id+':'+c.id,emoji:c.emoji,name:c.name,color:j.color,group:SJ+j.id});
-  return list;
+  const lock=lockedJar();
+  return lock?list.filter(c=>c.group===SJ+lock):list;
 }
+// v45: someone else's shared expense keeps its recorder, so it can only move to another category of the same jar
+function lockedJar(){const o=draft&&draft.editShared&&draft.editShared.orig;return o&&o.by!==myUid()?draft.editShared.jid:null}
 function topCats(n){
   const cnt={},me=myUid();
   for(const t of S.txns)if(t.type==='expense'&&t.catId)cnt[t.catId]=(cnt[t.catId]||0)+1;
@@ -133,7 +136,8 @@ function addHtml(){
   }else{
     body=`<div class="row2"><label class="f">從<select id="from">${opts(d.from)}</select></label><label class="f">到<select id="to">${opts(d.to)}</select></label></div>`;
   }
-  return `${editing?'<h2 style="margin:0 0 12px">編輯紀錄</h2>':''}${d.editShared?'':`<div class="seg">${seg}</div>`}
+  const so=d.editShared&&d.editShared.orig;
+  return `${editing?`<h2 style="margin:0 0 ${so?'4px':'12px'}">編輯紀錄</h2>`:''}${so?`<p class="note" style="margin:0 0 12px">${esc(byLine(so))}</p>`:''}${d.editShared?'':`<div class="seg">${seg}</div>`}
   <button type="button" class="amount" id="amtBox" data-action="kpshow" aria-label="金額">${amountInner()}</button>
   ${body}
   <p class="hint" id="hint"></p>
@@ -195,9 +199,25 @@ function saveDraft(){
   if(d.type==='expense'&&!c)return;
   if(c&&c.shared){ // goes into the shared jar
     if(!cloudOn()){toast('需要登入才能記到共用罐');return}
-    const id=(oldS&&oldS.jid===c.jid)?oldS.id:uid();
-    const keepSplit=oldS&&oldS.jid===c.jid&&oldS.split;
-    const doc={kind:'expense',amount:amt,date,note,by:myUid(),byName:myName(),emoji:c.emoji,catName:c.name,catKey:c.key,split:keepSplit||((Cloud.jars[c.jid]||{}).members||[]).length||1,ts:(oldS&&oldS.ts)||Date.now()};
+    const me=myUid(),same=!!oldS&&oldS.jid===c.jid,o=oldS&&oldS.orig;
+    if(o&&o.by!==me&&!same){toast('別人記的支出只能改成同一個共用罐的分類');return}
+    const id=same?oldS.id:uid();
+    const keepSplit=same&&oldS.split;
+    const split=keepSplit||((Cloud.jars[c.jid]||{}).members||[]).length||1;
+    let doc;
+    if(o){ // v45: editing keeps the recorder; only the last edit is kept
+      const f=[];
+      if(o.amount!==amt)f.push('amount');
+      if(!same||(o.catKey||'')!==c.key)f.push('cat');
+      if(o.date!==date)f.push('date');
+      if((o.note||'')!==note)f.push('note');
+      if(!f.length){closeSheet();toast('沒有變更');return}
+      const keepCat=same&&o.catKey===c.key; // same category: keep the saved name and emoji
+      doc={kind:'expense',amount:amt,date,note,by:o.by,emoji:keepCat&&o.emoji?o.emoji:c.emoji,catName:keepCat&&o.catName?o.catName:c.name,catKey:c.key,split,ts:o.ts||Date.now(),
+        editedBy:me,editedByName:myName(),editedAt:Date.now(),editedFields:f};
+      if(o.byName!=null)doc.byName=o.byName;
+      if(f.includes('amount'))doc.prevAmount=o.amount;
+    }else doc={kind:'expense',amount:amt,date,note,by:me,byName:myName(),emoji:c.emoji,catName:c.name,catKey:c.key,split,ts:Date.now()};
     jarTxnRef(c.jid,id).set(doc).catch(e=>toast('共用罐儲存失敗：'+(e.code||'')));
     if(oldS&&oldS.jid!==c.jid)jarTxnRef(oldS.jid,oldS.id).delete().catch(()=>{});
     if(oldP)removeTxn(oldP.id);
@@ -225,11 +245,17 @@ function openShared(jid,id){
   const t=(Cloud.jarTxns[jid]||[]).find(x=>x.id===id);if(!t)return;
   const me=myUid();
   if(t.by===me&&id.startsWith('m_')&&S.txns.find(x=>x.id===id.slice(2))){openTx(id.slice(2));return}
-  if(t.by===me&&t.kind==='expense'){
-    draft={editShared:{jid,id,ts:t.ts,split:t.split},type:'expense',amount:String(t.amount),date:t.date,note:t.note||'',catId:resolveCat(t.catKey)?t.catKey:null,mode:'pct'};
+  if(t.kind==='expense'){ // v45: any member can edit a shared expense
+    draft={editShared:{jid,id,ts:t.ts,split:t.split,orig:t},type:'expense',amount:String(t.amount),date:t.date,note:t.note||'',catId:resolveCat(t.catKey)?t.catKey:null,mode:'pct'};
+    if(lockedJar()&&(resolveCat(draft.catId)||{}).jid!==jid)draft.catId=null;
     openSheet(addHtml());return;
   }
-  const why=t.by!==me?`這筆是 ${esc(t.byName||'成員')} 記的，只有記錄的人可以修改。`:t.kind==='contrib'||t.kind==='cover'?jarSpendWhy(t.kind,t.src||'')
+  // records written automatically by a member's own device: only that member can change them
+  const n=esc(t.byName||'成員');
+  const why=t.by!==me?(t.kind==='contrib'?`這是 ${n} 的每月撥款，由對方的裝置依撥款設定自動產生，只有 ${n} 本人可以修改。`
+      :t.kind==='cover'?`這是 ${n} 分攤的超支份額，由對方的裝置自動產生，只有 ${n} 本人可以修改。`
+      :`這筆由 ${n} 的帳本自動產生，只有 ${n} 本人可以修改。`)
+    :t.kind==='contrib'||t.kind==='cover'?jarSpendWhy(t.kind,t.src||'')
     :'這筆由你的帳本自動產生。';
   openSheet(`<ul class="txs">${sharedRow(t,true)}</ul><p class="note">${t.date}</p><p class="note">${why}</p>
     <button class="ghost" style="width:100%;margin-top:10px" data-action="close">關閉</button>`);
