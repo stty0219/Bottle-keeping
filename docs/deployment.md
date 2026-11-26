@@ -61,15 +61,15 @@
 
 ## 6. 本機測試
 
-在專案根目錄啟動任一個靜態伺服器，例如：
+在專案根目錄啟動本機伺服器（需要 Node.js）：
 
 ```sh
-python -m http.server 8000      # macOS / Linux 可能要用 python3
+npm run serve      # = npx http-server -p 8000 -c-1（-c-1：不快取，改完重新整理就能看到）
 ```
 
-然後打開 `http://localhost:8000`。
+然後打開 `http://localhost:8000`。第一次執行時 npx 會詢問是否下載 `http-server`，按 `y` 即可。
 
 - 必須透過 `http://localhost` 開啟，直接開 `index.html`（`file://`）時 Service Worker 與 Firebase 登入無法運作。
 - 本機連到的是正式的 Firebase 專案，登入後讀寫的就是真實資料。測試時建議使用另一個測試帳號。
 - Service Worker 會快取檔案。如果改完看不到變化，重新整理一次；還是不行時，在開發者工具的 Application → Service Workers 勾選「Update on reload」。
-- 測試項目見 [development.md](development.md#測試清單)。
+- 自動測試（`npm test`）見 [development.md](development.md#測試)；手動測試項目見 [development.md](development.md#測試清單)。
