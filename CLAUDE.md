@@ -26,7 +26,7 @@
 | [docs/architecture.md](docs/architecture.md) | 檔案結構與職責、script 載入順序、資料結構（`S`、localStorage、Firestore）、舊資料轉換、同步、回報問題 | 新增或搬移檔案、改資料欄位、改同步或回報功能前 |
 | [docs/calculation-rules.md](docs/calculation-rules.md) | 每月分配、結轉、月底結算、超支墊付、共用罐、個人支出、評等 | 改 `js/calc.js` 或任何金額、合計、評等相關的程式前 |
 | [docs/deployment.md](docs/deployment.md) | GitHub Pages、Firebase 設定、安全規則、開發者 UID、本機測試 | 改 `firestore.rules`、`firebase-config.js`、`DEV_UID` 前 |
-| [docs/development.md](docs/development.md) | 分支、commit、PR、改版步驟、測試清單、待辦 | 每次改版與測試時 |
+| [docs/development.md](docs/development.md) | 分支、commit、PR、改版步驟、自動測試（`npm test`）、測試清單、待辦 | 每次改版與測試時 |
 
 每份資料只寫在一個地方：細節以 docs/ 為準，這份檔案只放合作規則與最容易出錯的重點。修改程式後，相關文件要一起更新。
 
@@ -56,7 +56,8 @@
 3. 新增或刪除 `css/`、`js/` 的檔案時，同步更新 `index.html` 的載入清單（注意順序）與 `sw.js` 的 `CORE`。
 4. 修改 `firestore.rules` 時，在說明與 commit 內文明確提醒我要貼到 Firebase 主控台。
 5. 把 `README.md` 最底下的「最新版本」整段換成這次的版本，和 `CHANGELOG` 第一筆一致（只放最新一版）；並更新受影響的 docs 文件。
-6. 跑完 [測試清單](docs/development.md#測試清單)，並提供 commit 訊息（格式見 development.md）。
+6. 修改計算相關程式時，先執行 `npm test`，並為新規則新增測試（見 [測試](docs/development.md#測試)）。
+7. 跑完 [測試清單](docs/development.md#測試清單)，並提供 commit 訊息（格式見 development.md）。本機伺服器用 `npm run serve`。
 
 ## 安全與資料
 

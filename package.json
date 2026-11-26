@@ -1,0 +1,12 @@
+{
+  "name": "bottle-keeping",
+  "private": true,
+  "description": "分罐記帳的測試與本機伺服器指令（App 本身沒有建置流程，不需要安裝任何套件）",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "serve": "npx http-server -p 8000 -c-1"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1"
+  }
+}

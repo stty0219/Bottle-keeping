@@ -64,7 +64,7 @@
 | [docs/architecture.md](docs/architecture.md) | 技術架構、檔案結構與職責、script 載入順序、資料結構 |
 | [docs/calculation-rules.md](docs/calculation-rules.md) | 計算規則：每月分配、結轉、月底結算、超支墊付、共用罐、個人支出、評等 |
 | [docs/deployment.md](docs/deployment.md) | 部署：GitHub Pages、Firebase 設定、安全規則、本機測試 |
-| [docs/development.md](docs/development.md) | 開發流程：分支、commit、PR、改版步驟、測試清單 |
+| [docs/development.md](docs/development.md) | 開發流程：分支、commit、PR、改版步驟、自動測試（`npm test`）、測試清單 |
 
 ## 最新版本
 
